@@ -1,0 +1,221 @@
+from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Dict, Mapping, List, Tuple, Iterable, FrozenSet, Union
+import networkx as nx
+
+# ---------------------------------------------------------------------------
+# Basic type aliases
+# ---------------------------------------------------------------------------
+Coord = Tuple[int, int]  # (row, col) 0‑based
+Edge = frozenset[Coord]  # unordered pair of neighbouring coordinates
+Wall = Tuple[Coord, str, int]  # ((row, col), "H"|"V", length)
+PlayerMove = Tuple[str, Coord]  # (player‑id, destination)
+Move = Union[Wall, PlayerMove]  # either a wall descriptor or a player move
+
+
+@dataclass(frozen=True, slots=True)
+class BoardState:
+    """Immutable *n×n* board with walls and players.
+
+    Build an initial state via :py:meth:`from_walls` and advance it one *move*
+    at a time with :py:meth:`from_move`.
+    """
+
+    n: int
+    blocked: FrozenSet[Edge] = field(default_factory=frozenset)
+    players: Mapping[str, Coord] = field(default_factory=dict)
+
+    # ------------------------------------------------------------------
+    # Static helpers (single source of truth, no repetition) ------------
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _edge(a: Coord, b: Coord) -> Edge:
+        """Return the canonical, hashable representation of an unordered edge."""
+        return frozenset((a, b))
+
+    @staticmethod
+    def _in_bounds(n: int, c: Coord) -> bool:
+        r, col = c
+        return 0 <= r < n and 0 <= col < n
+
+    @staticmethod
+    def _wall_edges(n: int, start: Coord, orientation: str, length: int) -> List[Edge]:
+        """Expand a wall descriptor into its constituent blocked edges.
+
+        * ``orientation == 'V'`` blocks *vertical* wall segments – i.e. the
+          edges **between** ``(r+i, c)`` and ``(r+i, c+1)`` for *i = 0…length‑1*.
+        * ``orientation == 'H'`` blocks *horizontal* wall segments – the edges
+          between ``(r, c+i)`` and ``(r+1, c+i)``.
+        """
+        r, c = start
+        orientation = orientation.upper()
+        if orientation not in {"H", "V"}:
+            raise ValueError("orientation must be 'H' or 'V'")
+
+        edges: List[Edge] = []
+        for i in range(length):
+            if orientation == "V":  # vertical wall – blocks East‑West edges
+                a, b = (r + i, c), (r + i, c + 1)
+            else:  # horizontal wall – blocks North‑South edges
+                a, b = (r, c + i), (r + 1, c + i)
+            if not (BoardState._in_bounds(n, a) and BoardState._in_bounds(n, b)):
+                raise ValueError("wall extends outside the board")
+            edges.append(BoardState._edge(a, b))
+        return edges
+
+    # ------------------------------------------------------------------
+    # Construction helpers ---------------------------------------------
+    # ------------------------------------------------------------------
+    @classmethod
+    def from_walls(
+            cls,
+            n: int,
+            *,
+            walls: Iterable[Wall] = (),
+            players: Mapping[str, Coord] | None = None,
+    ) -> "BoardState":
+        """Create an initial state from wall descriptors and player positions."""
+        blocked_edges: set[Edge] = set()
+        for start, orientation, length in walls:
+            blocked_edges.update(BoardState._wall_edges(n, start, orientation, length))
+
+        # Validate player positions
+        players = dict(players or {})
+        for pid, pos in players.items():
+            if not BoardState._in_bounds(n, pos):
+                raise ValueError(f"player {pid!r} outside board")
+
+        return cls(n, blocked=frozenset(blocked_edges), players=players)
+
+    # ------------------------------------------------------------------
+    # Instance‑level helpers -------------------------------------------
+    # ------------------------------------------------------------------
+    def _in_bounds_inst(self, c: Coord) -> bool:
+        return BoardState._in_bounds(self.n, c)
+
+    # ------------------------------------------------------------------
+    # Apply a single move ----------------------------------------------
+    # ------------------------------------------------------------------
+    def from_move(self, move: Move) -> "BoardState":
+        """Return a *new* state obtained by applying *move* to *self*.
+
+        Two legal move forms:
+        1. **Add wall** – a :data:`Wall` tuple ``((row,col), 'H'|'V', length)``.
+        2. **Move player** – ``(player_id: str, destination: Coord)``.
+        """
+        # ---------- Wall placement ------------------------------------
+        if (
+                isinstance(move, tuple)
+                and len(move) == 3
+                and isinstance(move[1], str)
+                and move[1].upper() in {"H", "V"}
+        ):
+            start, orientation, length = move  # type: ignore[misc]
+            new_blocked = set(self.blocked)
+            new_blocked.update(BoardState._wall_edges(self.n, start, orientation, length))
+            return BoardState(self.n, blocked=frozenset(new_blocked), players=self.players)
+
+        # ---------- Player move ---------------------------------------
+        if (
+                isinstance(move, tuple)
+                and len(move) == 2
+                and isinstance(move[0], str)
+        ):
+            pid, dest = move  # type: ignore[misc]
+            if pid not in self.players:
+                raise KeyError(f"unknown player id {pid!r}")
+            if not self._in_bounds_inst(dest):
+                raise ValueError("destination outside board")
+            new_players: Dict[str, Coord] = dict(self.players)
+            new_players[pid] = dest
+            return BoardState(self.n, blocked=self.blocked, players=new_players)
+
+        raise TypeError("move must be a Wall or (player_id, Coord)")
+
+    # ------------------------------------------------------------------
+    # Queries -----------------------------------------------------------
+    # ------------------------------------------------------------------
+    def neighbours(self, c: Coord) -> List[Coord]:
+        if not self._in_bounds_inst(c):
+            raise ValueError("coordinate outside board")
+        r, col = c
+        candidates = [(r - 1, col), (r + 1, col), (r, col - 1), (r, col + 1)]
+        return [d for d in candidates if self._in_bounds_inst(d) and BoardState._edge(c, d) not in self.blocked]
+
+    def graph(self) -> nx.Graph:
+        g = nx.Graph()
+        g.add_nodes_from((r, c) for r in range(self.n) for c in range(self.n))
+        for r in range(self.n):
+            for c in range(self.n):
+                a = (r, c)
+                for b in ((r + 1, c), (r, c + 1)):
+                    if self._in_bounds_inst(b) and BoardState._edge(a, b) not in self.blocked:
+                        g.add_edge(a, b)
+        return g
+
+    # ------------------------------------------------------------------
+    # ASCII rendering ---------------------------------------------------
+    # ------------------------------------------------------------------
+    def ascii(self) -> str:
+        empty_char = '*'
+        vert_char = '|'
+        horiz_char = '—'
+
+        rows: List[str] = []
+        player_at: Dict[Coord, str] = {pos: pid[0].upper() for pid, pos in self.players.items()}
+        e = BoardState._edge
+
+        for r in range(self.n):
+            # cell line with vertical walls
+            cell_parts: List[str] = []
+            for c in range(self.n):
+                cell_parts.append(player_at.get((r, c), empty_char))
+                if c != self.n - 1:
+                    cell_parts.append(vert_char if e((r, c), (r, c + 1)) in self.blocked else ' ')
+            rows.append(''.join(cell_parts))
+
+            # horizontal wall line
+            if r != self.n - 1:
+                wall_parts: List[str] = []
+                for c in range(self.n):
+                    wall_parts.append(horiz_char if e((r, c), (r + 1, c)) in self.blocked else ' ')
+                rows.append(' '.join(wall_parts))
+
+        return '\n'.join(rows)
+
+    # ------------------------------------------------------------------
+    # Dunder conveniences ----------------------------------------------
+    # ------------------------------------------------------------------
+    def __len__(self) -> int:
+        return self.n * self.n
+
+    def __contains__(self, item: Coord) -> bool:
+        return self._in_bounds_inst(item)
+
+    def __str__(self) -> str:
+        return self.ascii()
+
+    def __repr__(self) -> str:
+        return (
+            f"BoardState(n={self.n}, blocked={len(self.blocked)} edges, "
+            f"players={dict(self.players)})"
+        )
+
+
+# ------------------ quick demo ------------------
+if __name__ == "__main__":
+    # Start with an empty 5×5 board, add a *vertical* wall of length‑3
+    s0 = BoardState.from_walls(
+        5,
+        walls=[((1, 0), 'V', 3)],
+        players={'A': (0, 0), 'B': (4, 4)},
+    )
+    print("Initial board:\n", s0, sep='')
+
+    # Move player A one cell to the right
+    s1 = s0.from_move(('A', (0, 1)))
+    print("\nAfter moving A → (0,1):\n", s1, sep='')
+
+    # Add a horizontal wall of length‑2 starting at (0,2)
+    s2 = s1.from_move(((0, 2), 'H', 2))
+    print("\nAfter adding horizontal wall at (0,2) len=2:\n", s2, sep='')

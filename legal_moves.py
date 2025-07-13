@@ -17,7 +17,8 @@ class LegalMoves(Iterable[Move]):
     is open.
     """
 
-    def __init__(self, board: BoardState, player_id: str) -> None:
+    def __init__(self, board: BoardState, is_player: bool, player_id: str, opponent_id: str) -> None:
+        player_id = player_id if is_player else opponent_id
         if player_id not in board.players:
             raise KeyError(f"unknown player id {player_id!r}")
         self._board = board
@@ -48,12 +49,35 @@ class LegalMoves(Iterable[Move]):
         """Yield legal pawn moves (lazy)."""
         src = self._board.players[self._pid]
         occupied = set(self._board.players.values())
-        for dest in self._board.neighbours(src):
-            if dest not in occupied:
-                yield self._pid, dest
+
+        r, c = src
+        news = [(-1, 0), (0, 1), (0, -1), (1, 0)]
+        for direction in news:
+            candidate = r + direction[0], c + direction[1]
+            if not (self._board._in_bounds_inst(candidate) and BoardState._edge(src, candidate) not in self._board.blocked_edges):
+                continue
+            if candidate not in occupied:
+                yield self._pid, candidate
             else:
-                # TODO allow jumping
-                pass
+                jump_candidate = r + direction[0]*2, c + direction[1]*2
+                if self._board._in_bounds_inst(jump_candidate) and BoardState._edge(candidate, jump_candidate) not in self._board.blocked_edges:
+                    yield self._pid, jump_candidate
+                else:
+                    diag1_candidate = r + direction[0] + direction[1], c + direction[1] + direction[0]
+                    if self._board._in_bounds_inst(diag1_candidate) and BoardState._edge(candidate, diag1_candidate) not in self._board.blocked_edges:
+                        yield self._pid, diag1_candidate
+                    diag2_candidate = r + direction[0] - direction[1], c + direction[1] - direction[0]
+                    if self._board._in_bounds_inst(diag2_candidate) and BoardState._edge(candidate, diag2_candidate) not in self._board.blocked_edges:
+                        yield self._pid, diag2_candidate
+        # TODO count how many walls left to use
+
+        #
+        # for dest in self._board.neighbours(src):
+        #     if dest not in occupied:
+        #         yield self._pid, dest
+        #     else:
+        #         # TODO allow jumping
+        #         pass
 
     # ------------------------------------------------------------------
     # Wall moves -------------------------------------------------------
@@ -73,7 +97,7 @@ class LegalMoves(Iterable[Move]):
                         continue  # off‑board TODO catch better
                     if self._overlaps(edges):
                         continue
-                    yield start, orient
+                    yield start, orient  # TODO only if doesnt block any player
 
     # ------------------------------------------------------------------
     # Helper checks ----------------------------------------------------

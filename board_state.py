@@ -132,13 +132,13 @@ class BoardState:
     # ------------------------------------------------------------------
     # Queries -----------------------------------------------------------
     # ------------------------------------------------------------------
-    def neighbours(self, c: Coord) -> List[Coord]:
-        if not self._in_bounds_inst(c):
+    def neighbours(self, coord: Coord) -> List[Coord]:
+        if not self._in_bounds_inst(coord):
             raise ValueError("coordinate outside board")
-        r, col = c
-        candidates = [(r - 1, col), (r + 1, col), (r, col - 1), (r, col + 1)]
+        r, c = coord
+        candidates = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
 
-        return [d for d in candidates if self._in_bounds_inst(d) and BoardState._edge(c, d) not in self.blocked_edges]
+        return [dest for dest in candidates if self._in_bounds_inst(dest) and BoardState._edge(coord, dest) not in self.blocked_edges]
 
     def graph(self) -> nx.Graph:
         g = nx.Graph()

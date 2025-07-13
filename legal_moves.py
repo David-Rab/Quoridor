@@ -39,19 +39,21 @@ class LegalMoves(Iterable[Move]):
     def __iter__(self) -> Iterator[Move]:
         # yield pawn moves first, then wall moves
         yield from self.pawn_moves()
-        yield from self.wall_moves()
+        yield from self.wall_moves()  # TODO only if wall left
 
     # ------------------------------------------------------------------
     # Pawn moves -------------------------------------------------------
     # ------------------------------------------------------------------
     def pawn_moves(self) -> Iterator[PlayerMove]:
         """Yield legal pawn moves (lazy)."""
-        # TODO allow jump and diagonal
         src = self._board.players[self._pid]
         occupied = set(self._board.players.values())
         for dest in self._board.neighbours(src):
             if dest not in occupied:
                 yield self._pid, dest
+            else:
+                # TODO allow jumping
+                pass
 
     # ------------------------------------------------------------------
     # Wall moves -------------------------------------------------------
@@ -90,7 +92,6 @@ class LegalMoves(Iterable[Move]):
 
 
 if __name__ == "__main__":
-    # Start with an empty 5×5 board, add a *vertical* wall of length‑3
     s0 = BoardState.from_walls(
         5,
         walls=[((0, 0), 'V')],

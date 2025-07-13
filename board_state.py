@@ -208,12 +208,18 @@ if __name__ == "__main__":
         walls=[((1, 0), 'V')],
         players={'A': (0, 0), 'B': (4, 4)},
     )
+    g0 = s0.graph()
     print("Initial board:\n", s0, sep='')
+    print(g0)
 
     # Move player A one cell to the right
     s1 = s0.from_move(('A', (0, 1)))
+    g1 = s1.graph()
     print("\nAfter moving A → (0,1):\n", s1, sep='')
+    print(g1)
 
     # Add a horizontal wall of length‑2 starting at (0,2)
     s2 = s1.from_move(((0, 2), 'H'))
+    g2 = s2.graph()
     print("\nAfter adding horizontal wall at (0,2) len=2:\n", s2, sep='')
+    print(g2)

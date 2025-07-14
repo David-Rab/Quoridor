@@ -1,10 +1,12 @@
-from typing import Set, Optional, Iterable, Hashable, Tuple
+from typing import Set, Optional, Iterable, Hashable, Tuple, Callable, Dict
 from consts import Coord
 from math import inf
 import operator
 
 from collections import deque
-from typing import List, Tuple, Set, Optional
+
+
+# import random
 
 
 def bfs_single_source_nearest_target(
@@ -50,58 +52,72 @@ def bfs_single_source_nearest_target(
 
     return None  # No target reachable
 
-def minimax_alphabeta(
-        node: Hashable,
-        depth: int,
-        alpha: float = -inf,
-        beta: float = inf,
-        max_turn: bool = True,
-        children_fn=lambda n, p: [],  # iterable of child nodes
-        leaf_value=lambda n: 0.0  # returns payoff for MAX
-) -> float:
-    """Return the minimax value of `node` using α-β pruning."""
-    if depth == 0:  # leaf
-        return leaf_value(node)
 
-    if max_turn:
-        value = -inf
-        for child in children_fn(node, max_turn):
-            value = max(
-                value,
-                minimax_alphabeta(child, depth - 1, alpha, beta, False,
-                                  children_fn, leaf_value)
-            )
-            alpha = max(alpha, value)
-            if alpha >= beta:  # beta cut-off
-                break
+class MinimaxSolver:
+    def __init__(
+            self,
+            children_fn: Callable[[Hashable, bool], list],
+            leaf_value: Callable[[Hashable], float]
+    ):
+        self.children_fn = children_fn
+        self.leaf_value = leaf_value
+        self.cache: Dict[Tuple[Hashable, int, bool], float] = {}
+
+    def _evaluate(
+            self,
+            node: Hashable,
+            depth: int,
+            alpha: float = -inf,
+            beta: float = inf,
+            max_turn: bool = True
+    ) -> float:
+        key = (node, depth, max_turn)  # TODO do I need same depth and max_turn?
+        if len(self.cache.keys()) % 20000 == 0:  # TODO remove this debug
+            print(len(self.cache), depth)
+        if key in self.cache:
+            return self.cache[key]
+
+        if depth == 0:
+            value = self.leaf_value(node)
+            self.cache[key] = value
+            return value
+
+        children = self.children_fn(node, max_turn)
+        if max_turn:
+            value = -inf
+            for child in children:
+                child_val = self._evaluate(child, depth - 1, alpha, beta, False)
+                value = max(value, child_val)
+                alpha = max(alpha, value)
+                if alpha >= beta:
+                    break
+        else:
+            value = inf
+            for child in children:
+                child_val = self._evaluate(child, depth - 1, alpha, beta, True)
+                value = min(value, child_val)
+                beta = min(beta, value)
+                if beta <= alpha:
+                    break
+
+        self.cache[key] = value
         return value
-    else:  # MIN’s turn
-        value = inf
-        for child in children_fn(node, max_turn):
-            value = min(
-                value,
-                minimax_alphabeta(child, depth - 1, alpha, beta, True,
-                                  children_fn, leaf_value)
-            )
-            beta = min(beta, value)
-            if beta <= alpha:  # alpha cut-off
-                break
-        return value
 
+    def best_child(
+            self,
+            root: Hashable,
+            depth: int,
+            max_turn: bool
+    ) -> Optional[Hashable]:
+        """Returns the best child node at the root level."""
+        best_value = -inf if max_turn else inf
+        compare = operator.gt if max_turn else operator.lt
+        best_child = None
 
-def minimax_best_child(root: Hashable,
-                       depth: int,
-                       max_turn: bool,
-                       children_fn=lambda n, p: [],  # iterable of child nodes
-                       leaf_value=lambda n: 0.0  # returns payoff for MAX
-                       ) -> Hashable:
-    # Top-level decision
-    best_value = -inf if max_turn else inf
-    op = operator.gt if max_turn else operator.lt
-    best_child = None
-    for child in children_fn(root, max_turn):
-        v = minimax_alphabeta(child, depth - 1, -inf, inf, not max_turn,
-                              children_fn, leaf_value)
-        if op(v, best_value):
-            best_value, best_child = v, child  # TODO randomize if tie
-    return best_child
+        for child in self.children_fn(root, max_turn):
+            val = self._evaluate(child, depth - 1, -inf, inf, not max_turn)
+            if compare(val, best_value):
+                best_value = val
+                best_child = child  # TODO randomize if tie, save in list and then return random
+
+        return best_child

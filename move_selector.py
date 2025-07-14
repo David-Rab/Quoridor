@@ -1,5 +1,5 @@
 from legal_moves import LegalMoves
-from algorithms import minimax_best_child
+from algorithms import MinimaxSolver
 from board_state import BoardState
 from consts import Coord
 from typing import Set
@@ -19,8 +19,7 @@ def move_selector(board: BoardState,
             if path_diff is not None:
                 yield board_from_move
 
-    best_move = minimax_best_child(board, depth, max_turn=True,
-                                   children_fn=children_fn,
-                                   leaf_value=leaf_fn
-                                   )
+    solver = MinimaxSolver(children_fn=children_fn, leaf_value=leaf_fn)
+    best_move = solver.best_child(board, depth, max_turn=True)
+
     return best_move

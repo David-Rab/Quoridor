@@ -44,9 +44,10 @@ if __name__ == "__main__":
         5,
         walls=[((0, 0), 'V')],
         players={'A': (0, 0), 'B': (4,4)},
+        players_walls={'A': 10, 'B': 10}
     )
 
     goals = {(i, 4) for i in range(4)}
-    dist = path_length_difference(bs, 'A', 'B', goals)
+    dist = path_length_difference(bs, 'A', 'B', goals, goals)
     print(bs)
     print("\nShortest path length diff:", dist)

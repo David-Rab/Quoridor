@@ -5,7 +5,7 @@ from board_state import BoardState
 
 
 def path_length_difference(
-    state: BoardState,
+    board: BoardState,
     player_id: str,
     opponent_id: str,
     player_targets: Set[Coord],
@@ -19,20 +19,20 @@ def path_length_difference(
         ``player_path_len - opponent_path_len`` if *both* are reachable;
         ``None`` if either side cannot reach a goal.
     """
-    if player_id not in state.players:
+    if player_id not in board.players:
         raise KeyError(f"unknown player id {player_id!r}")
-    if opponent_id not in state.players:
+    if opponent_id not in board.players:
         raise KeyError(f"unknown player id {opponent_id!r}")
     for t in player_targets:
-        if not state._in_bounds_inst(t):
+        if not board._in_bounds_inst(t):
             raise ValueError(f"target {t} outside board")
     for t in opponent_targets:
-        if not state._in_bounds_inst(t):
+        if not board._in_bounds_inst(t):
             raise ValueError(f"target {t} outside board")
 
-    G = state.graph()
-    player_len = bfs_single_source_nearest_target(G, state.players[player_id], player_targets)
-    opponent_len = bfs_single_source_nearest_target(G, state.players[opponent_id], opponent_targets)
+    # G = board.graph()
+    player_len = bfs_single_source_nearest_target(board.n, board.blocked_edges, board.players[player_id], player_targets)
+    opponent_len = bfs_single_source_nearest_target(board.n, board.blocked_edges, board.players[opponent_id], opponent_targets)
 
     if player_len is None or opponent_len is None:
         return None

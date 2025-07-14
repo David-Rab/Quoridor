@@ -8,25 +8,29 @@ from typing import List, Tuple, Set, Optional
 
 
 def bfs_single_source_nearest_target(
-        G: List[List[List[Coord]]],
+        n: int,
+        blocked_edges: frozenset[frozenset[Coord]],
         source: Coord,
-        targets: Set[Coord]
+        targets: Set[Coord],
 ) -> Optional[int]:
     """
-    Returns the shortest distance from source to any target node.
+    Returns the shortest distance from source to any target node in an n x n grid,
+    avoiding blocked edges. Assumes all nodes exist.
 
     Args:
-        adjacency_grid: 2D grid with adjacency lists.
-        source: (row, col) starting node.
-        targets: set of (row, col) destination nodes.
+        n: Grid size (n x n)
+        source: (row, col) starting node
+        targets: Set of (row, col) destination nodes
+        blocked_edges: Set of frozenset({Coord, Coord}) representing undirected blocked edges
 
     Returns:
-        Minimum distance to any target, or None if unreachable.
+        Minimum distance to any target, or None if unreachable
     """
-    n_rows, n_cols = len(G), len(G[0])
-    visited = [[False] * n_cols for _ in range(n_rows)]
+    visited = [[False] * n for _ in range(n)]
     queue = deque([(source, 0)])
-    target_set = targets
+
+    def in_bounds(r: int, c: int) -> bool:
+        return 0 <= r < n and 0 <= c < n
 
     while queue:
         (row, col), dist = queue.popleft()
@@ -34,15 +38,17 @@ def bfs_single_source_nearest_target(
             continue
         visited[row][col] = True
 
-        if (row, col) in target_set:
+        if (row, col) in targets:
             return dist
 
-        for nbr_row, nbr_col in G[row][col]:
-            if not visited[nbr_row][nbr_col]:
-                queue.append(((nbr_row, nbr_col), dist + 1))
+        for d_row, d_col in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nbr = (row + d_row, col + d_col)
+            if in_bounds(*nbr):
+                edge = frozenset({(row, col), nbr})
+                if edge not in blocked_edges and not visited[nbr[0]][nbr[1]]:
+                    queue.append((nbr, dist + 1))
 
     return None  # No target reachable
-
 
 def minimax_alphabeta(
         node: Hashable,

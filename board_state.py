@@ -139,21 +139,6 @@ class BoardState:
         return [dest for dest in candidates if
                 self._in_bounds_inst(dest) and BoardState._edge(coord, dest) not in self.blocked_edges]
 
-    def graph(self) -> list[list[list[Coord]]]:
-        """Builds a 2D adjacency list for the grid graph, excluding blocked edges."""
-        adjacency_grid = [[[] for _ in range(self.n)] for _ in range(self.n)]
-
-        for row in range(self.n):
-            for col in range(self.n):
-                current = (row, col)
-                for d_row, d_col in [(1, 0), (0, 1)]:  # check down and right neighbors
-                    neighbor = (row + d_row, col + d_col)
-                    if self._in_bounds_inst(neighbor) and BoardState._edge(current, neighbor) not in self.blocked_edges:
-                        adjacency_grid[row][col].append(neighbor)
-                        adjacency_grid[neighbor[0]][neighbor[1]].append(current)  # add reverse edge (undirected)
-
-        return adjacency_grid
-
     # ------------------------------------------------------------------
     # ASCII rendering ---------------------------------------------------
     # ------------------------------------------------------------------

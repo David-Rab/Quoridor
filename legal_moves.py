@@ -18,8 +18,7 @@ class LegalMoves(Iterable[Move]):
     is open.
     """
 
-    def __init__(self, board: BoardState, is_player: bool, player_id: int, opponent_id: int) -> None:
-        player_id = player_id if is_player else opponent_id
+    def __init__(self, board: BoardState, player_id: int) -> None:
         if player_id not in {0, 1}:
             raise KeyError(f"unknown player id {player_id!r}")
         self._board = board
@@ -130,7 +129,7 @@ if __name__ == "__main__":
     s2 = s1.from_move(WallMove(1, ((0, 2), 'H')))
     print("\nAfter adding horizontal wall at (0,2) len=2:\n", s2, sep='')
 
-    legal_moves = LegalMoves(s2, True, 0, 1)
+    legal_moves = LegalMoves(s2, 0)
 
     for move in legal_moves:
         print(move, sep='\n\n')

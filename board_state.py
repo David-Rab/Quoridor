@@ -34,12 +34,12 @@ class BoardState:
         object.__setattr__(self, "path_len_diff", path_len_diff)
 
     def _path_length_difference(self) -> Optional[int]:
-        """Difference between opponent's and player's shortest path lengths.
+        """Difference between player's and opponent's shortest path lengths.
 
         Returns
         -------
         int | None
-            ``opponent_path_len - player_path_len`` if *both* are reachable;
+            ``player0_len - player1_len`` if *both* are reachable;
             ``None`` if either side cannot reach a goal.
         """
         player0_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[0],
@@ -49,7 +49,7 @@ class BoardState:
 
         if player0_len is None or player1_len is None:
             return None
-        return player1_len - player0_len
+        return player0_len - player1_len
 
     # ------------------------------------------------------------------
     # Static helpers (single source of truth, no repetition) ------------

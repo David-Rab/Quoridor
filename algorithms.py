@@ -6,9 +6,6 @@ import operator
 from collections import deque
 
 
-# import random
-
-
 def bfs_single_source_nearest_target(
         n: int,
         blocked_edges: frozenset[frozenset[Coord]],
@@ -74,8 +71,6 @@ class MinimaxSolver:
             max_turn: bool = True
     ) -> float:
         key = (node, depth, max_turn)  # TODO do I need same depth and max_turn?
-        if len(self.cache.keys()) % 20000 == 0:  # TODO remove this debug
-            print(len(self.cache), depth)
         if key in self.cache:
             return self.cache[key]
 

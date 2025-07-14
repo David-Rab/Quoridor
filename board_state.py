@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple, Iterable, FrozenSet
-from consts import Coord, Edge, Wall
+from typing import Dict, List, Tuple, Iterable, FrozenSet, Optional
+from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS
 from moves import Move, PlayerMove, WallMove
+from algorithms import bfs_single_source_nearest_target
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,7 @@ class BoardState:
     walls: FrozenSet[Wall] = field(default_factory=frozenset)
 
     blocked_edges: FrozenSet[Edge] = field(init=False, repr=False)
+    path_len_diff: int = 0
 
     def __post_init__(self) -> None:
         edges: set[Edge] = set()
@@ -28,6 +30,26 @@ class BoardState:
 
         # bypass the freeze just this once
         object.__setattr__(self, "blocked_edges", frozenset(edges))
+        path_len_diff = self._path_length_difference()
+        object.__setattr__(self, "path_len_diff", path_len_diff)
+
+    def _path_length_difference(self) -> Optional[int]:
+        """Difference between opponent's and player's shortest path lengths.
+
+        Returns
+        -------
+        int | None
+            ``opponent_path_len - player_path_len`` if *both* are reachable;
+            ``None`` if either side cannot reach a goal.
+        """
+        player0_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[0],
+                                                       PLAYER0_TARGETS)
+        player1_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[1],
+                                                       PLAYER1_TARGETS)
+
+        if player0_len is None or player1_len is None:
+            return None
+        return player1_len - player0_len
 
     # ------------------------------------------------------------------
     # Static helpers (single source of truth, no repetition) ------------
@@ -107,8 +129,10 @@ class BoardState:
         if isinstance(move, WallMove):
             new_walls = set(self.walls)
             new_walls.add(move.wall)
-            players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (self.players_walls[0], self.players_walls[1] - 1)
-            return BoardState(self.n, walls=frozenset(new_walls), players_coord=self.players_coord, players_walls=players_walls)
+            players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (
+                self.players_walls[0], self.players_walls[1] - 1)
+            return BoardState(self.n, walls=frozenset(new_walls), players_coord=self.players_coord,
+                              players_walls=players_walls)
 
         # ---------- Player move ---------------------------------------
         if isinstance(move, PlayerMove):
@@ -145,6 +169,7 @@ class BoardState:
         e = BoardState._edge
 
         rows.append(' : '.join(f'p{k}={v}' for k, v in enumerate(self.players_walls)))
+        rows.append(f'path len p1-p0={self.path_len_diff}')
 
         for r in range(self.n):
             # cell line with vertical walls
@@ -179,7 +204,8 @@ class BoardState:
     def __repr__(self) -> str:
         return (
             f"BoardState(n={self.n}, blocked={len(self.blocked_edges)} edges, "
-            f"players={self.players_coord}, players_wall={self.players_walls})"
+            f"players={self.players_coord}, players_wall={self.players_walls}, "
+            f"diff={self.path_len_diff})"
         )
 
 
@@ -187,7 +213,7 @@ class BoardState:
 if __name__ == "__main__":
     # Start with an empty 5×5 board, add a *vertical* wall of length‑3
     s0 = BoardState.from_walls(
-        5,
+        9,
         walls=[((1, 0), 'V')],
         players_coords=((0, 0), (4, 4)),
         players_walls=(10, 9)

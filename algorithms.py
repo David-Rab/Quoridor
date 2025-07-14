@@ -1,38 +1,47 @@
-import networkx as nx
 from typing import Set, Optional, Iterable, Hashable, Tuple
 from consts import Coord
 from math import inf
 import operator
 
+from collections import deque
+from typing import List, Tuple, Set, Optional
 
-def bfs_single_source_nearest_target(G: nx.Graph, source: Coord, targets: Set[Coord]) -> Optional[int]:
+
+def bfs_single_source_nearest_target(
+        G: List[List[List[Coord]]],
+        source: Coord,
+        targets: Set[Coord]
+) -> Optional[int]:
     """
-    Return (distance, path) from `source` to the nearest node in `targets`.
-    If no target is reachable, return None.
+    Returns the shortest distance from source to any target node.
 
-    Parameters
-    ----------
-    G : networkx.Graph        # undirected and unweighted
-    source : hashable
-    targets : Iterable[hashable]
+    Args:
+        adjacency_grid: 2D grid with adjacency lists.
+        source: (row, col) starting node.
+        targets: set of (row, col) destination nodes.
+
+    Returns:
+        Minimum distance to any target, or None if unreachable.
     """
-    if not targets:
-        raise ValueError("targets set cannot be empty")
-    if source in targets:  # trivial hit
-        return 0
+    n_rows, n_cols = len(G), len(G[0])
+    visited = [[False] * n_cols for _ in range(n_rows)]
+    queue = deque([(source, 0)])
+    target_set = targets
 
-    parent = {source: None}
-    for u, v in nx.bfs_edges(G, source):
-        parent[v] = u
-        if v in targets:  # first target met ⇒ closest
-            # reconstruct path v ← … ← source
-            path = [v]
-            while u is not None:
-                path.append(u)
-                u = parent[u]
-            return len(path) - 1
+    while queue:
+        (row, col), dist = queue.popleft()
+        if visited[row][col]:
+            continue
+        visited[row][col] = True
 
-    return None  # no target reachable
+        if (row, col) in target_set:
+            return dist
+
+        for nbr_row, nbr_col in G[row][col]:
+            if not visited[nbr_row][nbr_col]:
+                queue.append(((nbr_row, nbr_col), dist + 1))
+
+    return None  # No target reachable
 
 
 def minimax_alphabeta(

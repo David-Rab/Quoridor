@@ -3,7 +3,6 @@ from __future__ import annotations
 from copy import copy
 from dataclasses import dataclass, field
 from typing import Dict, Mapping, List, Tuple, Iterable, FrozenSet, Union
-import networkx as nx
 from consts import Coord, Edge, Wall
 from moves import Move, PlayerMove, WallMove
 
@@ -140,16 +139,20 @@ class BoardState:
         return [dest for dest in candidates if
                 self._in_bounds_inst(dest) and BoardState._edge(coord, dest) not in self.blocked_edges]
 
-    def graph(self) -> nx.Graph:
-        g = nx.Graph()
-        g.add_nodes_from((r, c) for r in range(self.n) for c in range(self.n))
-        for r in range(self.n):
-            for c in range(self.n):
-                a = (r, c)
-                for b in ((r + 1, c), (r, c + 1)):
-                    if self._in_bounds_inst(b) and BoardState._edge(a, b) not in self.blocked_edges:
-                        g.add_edge(a, b)
-        return g
+    def graph(self) -> list[list[list[Coord]]]:
+        """Builds a 2D adjacency list for the grid graph, excluding blocked edges."""
+        adjacency_grid = [[[] for _ in range(self.n)] for _ in range(self.n)]
+
+        for row in range(self.n):
+            for col in range(self.n):
+                current = (row, col)
+                for d_row, d_col in [(1, 0), (0, 1)]:  # check down and right neighbors
+                    neighbor = (row + d_row, col + d_col)
+                    if self._in_bounds_inst(neighbor) and BoardState._edge(current, neighbor) not in self.blocked_edges:
+                        adjacency_grid[row][col].append(neighbor)
+                        adjacency_grid[neighbor[0]][neighbor[1]].append(current)  # add reverse edge (undirected)
+
+        return adjacency_grid
 
     # ------------------------------------------------------------------
     # ASCII rendering ---------------------------------------------------

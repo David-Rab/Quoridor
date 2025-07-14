@@ -57,10 +57,12 @@ class MinimaxSolver:
     def __init__(
             self,
             children_fn: Callable[[Hashable, bool], list],
-            leaf_value: Callable[[Hashable], float]
+            leaf_value: Callable[[Hashable], float],
+            ordering_fn: Optional[Callable[[Hashable], float]] = None
     ):
         self.children_fn = children_fn
         self.leaf_value = leaf_value
+        self.ordering_fn = ordering_fn
         self.cache: Dict[Tuple[Hashable, int, bool], float] = {}
 
     def _evaluate(
@@ -83,6 +85,9 @@ class MinimaxSolver:
             return value
 
         children = self.children_fn(node, max_turn)
+        if self.ordering_fn is not None:
+            children.sort(key=self.ordering_fn, reverse=max_turn)
+
         if max_turn:
             value = -inf
             for child in children:
@@ -109,12 +114,15 @@ class MinimaxSolver:
             depth: int,
             max_turn: bool
     ) -> Optional[Hashable]:
-        """Returns the best child node at the root level."""
         best_value = -inf if max_turn else inf
         compare = operator.gt if max_turn else operator.lt
         best_child = None
 
-        for child in self.children_fn(root, max_turn):
+        children = self.children_fn(root, max_turn)
+        if self.ordering_fn is not None:
+            children.sort(key=self.ordering_fn, reverse=max_turn)
+
+        for child in children:
             val = self._evaluate(child, depth - 1, -inf, inf, not max_turn)
             if compare(val, best_value):
                 best_value = val

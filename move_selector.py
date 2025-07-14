@@ -3,22 +3,21 @@ from path_length import path_length_difference
 from algorithms import minimax_best_child
 from board_state import BoardState
 from consts import Coord
-from moves import Move
 from typing import Set
 
 
 def move_selector(board: BoardState,
-                  player_id: str, opponent_id: str,
+                  player_id: int, opponent_id: int,
                   player_targets: Set[Coord], opponent_targets: Set[Coord],
                   depth: int) -> BoardState:
-    def leaf_fn(board: BoardState) -> float:
-        return path_length_difference(board, player_id, opponent_id,
+    def leaf_fn(state: BoardState) -> float:
+        return path_length_difference(state, player_id, opponent_id,
                                       player_targets, opponent_targets)
 
-    def children_fn(board: BoardState, is_player: bool) -> BoardState:
-        legal_moves = LegalMoves(board, is_player, player_id, opponent_id)
+    def children_fn(state: BoardState, is_player: bool) -> BoardState:
+        legal_moves = LegalMoves(state, is_player, player_id, opponent_id)
         for move in legal_moves:
-            board_from_move = board.from_move(move)
+            board_from_move = state.from_move(move)
             path_diff = path_length_difference(board_from_move, player_id, opponent_id,
                                                player_targets, opponent_targets)
             if path_diff is not None:

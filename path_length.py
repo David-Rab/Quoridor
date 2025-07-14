@@ -5,11 +5,11 @@ from board_state import BoardState
 
 
 def path_length_difference(
-    board: BoardState,
-    player_id: str,
-    opponent_id: str,
-    player_targets: Set[Coord],
-    opponent_targets: Set[Coord],
+        board: BoardState,
+        player_id: int,
+        opponent_id: int,
+        player_targets: Set[Coord],
+        opponent_targets: Set[Coord],
 ) -> Optional[int]:
     """Difference between player's and opponent's shortest path lengths.
 
@@ -19,10 +19,6 @@ def path_length_difference(
         ``player_path_len - opponent_path_len`` if *both* are reachable;
         ``None`` if either side cannot reach a goal.
     """
-    if player_id not in board.players:
-        raise KeyError(f"unknown player id {player_id!r}")
-    if opponent_id not in board.players:
-        raise KeyError(f"unknown player id {opponent_id!r}")
     for t in player_targets:
         if not board._in_bounds_inst(t):
             raise ValueError(f"target {t} outside board")
@@ -31,8 +27,10 @@ def path_length_difference(
             raise ValueError(f"target {t} outside board")
 
     # G = board.graph()
-    player_len = bfs_single_source_nearest_target(board.n, board.blocked_edges, board.players[player_id], player_targets)
-    opponent_len = bfs_single_source_nearest_target(board.n, board.blocked_edges, board.players[opponent_id], opponent_targets)
+    player_len = bfs_single_source_nearest_target(board.n, board.blocked_edges, board.players_coord[player_id],
+                                                  player_targets)
+    opponent_len = bfs_single_source_nearest_target(board.n, board.blocked_edges, board.players_coord[opponent_id],
+                                                    opponent_targets)
 
     if player_len is None or opponent_len is None:
         return None
@@ -43,11 +41,11 @@ if __name__ == "__main__":
     bs = BoardState.from_walls(
         5,
         walls=[((0, 0), 'V')],
-        players={'A': (0, 0), 'B': (4,4)},
-        players_walls={'A': 10, 'B': 10}
+        players_coords=((0, 0), (4, 4)),
+        players_walls=(10, 10)
     )
 
     goals = {(i, 4) for i in range(4)}
-    dist = path_length_difference(bs, 'A', 'B', goals, goals)
+    dist = path_length_difference(bs, 0, 1, goals, goals)
     print(bs)
     print("\nShortest path length diff:", dist)

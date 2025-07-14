@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import Dict, Mapping, List, Tuple, Iterable, FrozenSet, Union, Iterator, Set
+from typing import List, Tuple, Iterable, Iterator, Set
 from board_state import BoardState
-from consts import Coord, Edge, Wall
+from consts import Coord, Edge
 from moves import Move, PlayerMove, WallMove
 
 
@@ -18,9 +18,9 @@ class LegalMoves(Iterable[Move]):
     is open.
     """
 
-    def __init__(self, board: BoardState, is_player: bool, player_id: str, opponent_id: str) -> None:
+    def __init__(self, board: BoardState, is_player: bool, player_id: int, opponent_id: int) -> None:
         player_id = player_id if is_player else opponent_id
-        if player_id not in board.players:
+        if player_id not in {0, 1}:
             raise KeyError(f"unknown player id {player_id!r}")
         self._board = board
         self._pid = player_id
@@ -50,8 +50,8 @@ class LegalMoves(Iterable[Move]):
     # ------------------------------------------------------------------
     def pawn_moves(self) -> Iterator[PlayerMove]:
         """Yield legal pawn moves (lazy)."""
-        src = self._board.players[self._pid]
-        occupied = set(self._board.players.values())
+        src = self._board.players_coord[self._pid]
+        occupied = set(self._board.players_coord)
 
         r, c = src
         news = [(-1, 0), (0, 1), (0, -1), (1, 0)]
@@ -117,20 +117,20 @@ if __name__ == "__main__":
     s0 = BoardState.from_walls(
         5,
         walls=[((0, 0), 'V')],
-        players={'A': (0, 0), 'B': (4, 4)},
-        players_walls={'A': 0, 'B': 10},
+        players_coords=((0, 0), (4, 4)),
+        players_walls=(0, 10),
     )
     print("Initial board:\n", s0, sep='')
 
     # Move player A one cell to the right
-    s1 = s0.from_move(PlayerMove('A', (0, 1)))
+    s1 = s0.from_move(PlayerMove(0, (0, 1)))
     print("\nAfter moving A → (0,1):\n", s1, sep='')
 
     # Add a horizontal wall of length‑2 starting at (0,2)
-    s2 = s1.from_move(WallMove('B', ((0, 2), 'H')))
+    s2 = s1.from_move(WallMove(1, ((0, 2), 'H')))
     print("\nAfter adding horizontal wall at (0,2) len=2:\n", s2, sep='')
 
-    legal_moves = LegalMoves(s2, True, 'A', 'B')
+    legal_moves = LegalMoves(s2, True, 0, 1)
 
     for move in legal_moves:
         print(move, sep='\n\n')

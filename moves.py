@@ -4,7 +4,7 @@ from consts import Coord, Wall
 
 @dataclass(frozen=True)
 class Move:
-    player: str
+    player: int
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from copy import copy
 from dataclasses import dataclass, field
-from typing import Dict, Mapping, List, Tuple, Iterable, FrozenSet, Union
+from typing import Dict, List, Tuple, Iterable, FrozenSet
 from consts import Coord, Edge, Wall
 from moves import Move, PlayerMove, WallMove
 
@@ -16,9 +15,9 @@ class BoardState:
     """
 
     n: int
+    players_coord: Tuple[Coord, Coord]
+    players_walls: Tuple[int, int]
     walls: FrozenSet[Wall] = field(default_factory=frozenset)
-    players: Mapping[str, Coord] = field(default_factory=dict)
-    players_walls: Mapping[str, int] = field(default_factory=dict)
 
     blocked_edges: FrozenSet[Edge] = field(init=False, repr=False)
 
@@ -77,18 +76,16 @@ class BoardState:
             cls,
             n: int,
             walls: Iterable[Wall] = (),
-            players: Mapping[str, Coord] | None = None,
-            players_walls: Mapping[str, int] | None = None,
+            players_coords: Tuple[Coord, Coord] | None = None,
+            players_walls: Tuple[int, int] | None = None,
     ) -> "BoardState":
         """Create an initial state from wall descriptors and player positions."""
         # Validate player positions
-        players = dict(players or {})
-        players_walls = dict(players_walls or {})
-        for pid, pos in players.items():
+        for pid, pos in enumerate(players_coords):
             if not BoardState._in_bounds(n, pos):
                 raise ValueError(f"player {pid!r} outside board")  # TODO check overlap
 
-        return cls(n, walls=frozenset(walls), players=players, players_walls=players_walls)
+        return cls(n, walls=frozenset(walls), players_coord=players_coords, players_walls=players_walls)
 
     # ------------------------------------------------------------------
     # Instance‑level helpers -------------------------------------------
@@ -110,20 +107,16 @@ class BoardState:
         if isinstance(move, WallMove):
             new_walls = set(self.walls)
             new_walls.add(move.wall)
-            players_walls = dict(self.players_walls)
-            players_walls[move.player] = players_walls[move.player] - 1
-            return BoardState(self.n, walls=frozenset(new_walls), players=self.players, players_walls=players_walls)
+            players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (self.players_walls[0], self.players_walls[1] - 1)
+            return BoardState(self.n, walls=frozenset(new_walls), players_coord=self.players_coord, players_walls=players_walls)
 
         # ---------- Player move ---------------------------------------
         if isinstance(move, PlayerMove):
             pid, dest = move.player, move.coord  # type: ignore[misc]
-            if pid not in self.players:
-                raise KeyError(f"unknown player id {pid!r}")
             if not self._in_bounds_inst(dest):
                 raise ValueError("destination outside board")
-            new_players: Dict[str, Coord] = dict(self.players)
-            new_players[pid] = dest
-            return BoardState(self.n, walls=self.walls, players=new_players, players_walls=self.players_walls)
+            new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
+            return BoardState(self.n, walls=self.walls, players_coord=new_players, players_walls=self.players_walls)
 
         raise TypeError("move type note known")
 
@@ -148,10 +141,10 @@ class BoardState:
         horiz_char = '—'
 
         rows: List[str] = []
-        player_at: Dict[Coord, str] = {pos: pid[0].upper() for pid, pos in self.players.items()}
+        player_at: Dict[Coord, str] = {pos: str(pid) for pid, pos in enumerate(self.players_coord)}
         e = BoardState._edge
 
-        rows.append(' : '.join(f'{k}={v}' for k, v in self.players_walls.items()))
+        rows.append(' : '.join(f'p{k}={v}' for k, v in enumerate(self.players_walls)))
 
         for r in range(self.n):
             # cell line with vertical walls
@@ -186,7 +179,7 @@ class BoardState:
     def __repr__(self) -> str:
         return (
             f"BoardState(n={self.n}, blocked={len(self.blocked_edges)} edges, "
-            f"players={dict(self.players)}, players_wall={dict(self.players_walls)})"
+            f"players={self.players_coord}, players_wall={self.players_walls})"
         )
 
 
@@ -196,22 +189,16 @@ if __name__ == "__main__":
     s0 = BoardState.from_walls(
         5,
         walls=[((1, 0), 'V')],
-        players={'A': (0, 0), 'B': (4, 4)},
-        players_walls={'A': 10, 'B': 9}
+        players_coords=((0, 0), (4, 4)),
+        players_walls=(10, 9)
     )
     print(repr(s0))
-    g0 = s0.graph()
     print("Initial board:\n", s0, sep='')
-    print(g0)
 
     # Move player A one cell to the right
-    s1 = s0.from_move(PlayerMove(player='A', coord=(0, 1)))
-    g1 = s1.graph()
+    s1 = s0.from_move(PlayerMove(player=0, coord=(0, 1)))
     print("\nAfter moving A → (0,1):\n", s1, sep='')
-    print(g1)
 
     # Add a horizontal wall of length‑2 starting at (0,2)
-    s2 = s1.from_move(WallMove(player='A', wall=((0, 2), 'H')))
-    g2 = s2.graph()
+    s2 = s1.from_move(WallMove(player=0, wall=((0, 2), 'H')))
     print("\nAfter adding horizontal wall at (0,2) len=2:\n", s2, sep='')
-    print(g2)

@@ -44,11 +44,13 @@ class BoardState:
         """
         player0_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[0],
                                                        PLAYER0_TARGETS)
+        if player0_len is None:
+            return None
         player1_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[1],
                                                        PLAYER1_TARGETS)
-
-        if player0_len is None or player1_len is None:
+        if player1_len is None:
             return None
+
         return player0_len - player1_len
 
     # ------------------------------------------------------------------
@@ -169,7 +171,7 @@ class BoardState:
         e = BoardState._edge
 
         rows.append(' : '.join(f'p{k}={v}' for k, v in enumerate(self.players_walls)))
-        rows.append(f'path len p1-p0={self.path_len_diff}')
+        rows.append(f'path len p0-p1={self.path_len_diff}')
 
         for r in range(self.n):
             # cell line with vertical walls

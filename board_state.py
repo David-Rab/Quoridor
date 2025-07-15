@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Iterable, FrozenSet, Optional
-from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE
+from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE, BLOCKED_BYTES
 from moves import Move, PlayerMove, WallMove
+from utils import to_idx
 from algorithms import bfs_single_source_nearest_target
 from functools import lru_cache
 
@@ -35,17 +36,45 @@ class BoardState:
     walls: FrozenSet[Wall] = field(default_factory=frozenset)
 
     blocked_edges: FrozenSet[Edge] = field(init=False, repr=False)
+    blocked_direction_mask: bytes = field(init=False, repr=False)
     path_len_diff: int = 0
 
     def __post_init__(self) -> None:
+        # bypass the freeze just this once
+        blocked_edges = self._build_blocked_edges()
+        object.__setattr__(self, "blocked_edges", blocked_edges)
+        blocked_direction_mask = self._build_blocked_direction_mask()
+        object.__setattr__(self, "blocked_direction_mask", blocked_direction_mask)
+        path_len_diff = self._path_length_difference()
+        object.__setattr__(self, "path_len_diff", path_len_diff)
+
+    def _build_blocked_edges(self) -> FrozenSet[Edge]:
         edges: set[Edge] = set()
         for start, orientation in self.walls:
             edges.update(self._wall_edges(self.n, start, orientation))
+        return frozenset(edges)
 
-        # bypass the freeze just this once
-        object.__setattr__(self, "blocked_edges", frozenset(edges))
-        path_len_diff = self._path_length_difference()
-        object.__setattr__(self, "path_len_diff", path_len_diff)
+    def _build_blocked_direction_mask(self) -> bytes:
+        mask = bytearray(self.n * self.n)
+
+        for edge in self.blocked_edges:
+            (r1, c1), (r2, c2) = tuple(edge)
+            idx1, idx2 = to_idx(r1, c1, self.n), to_idx(r2, c2, self.n)
+
+            if r2 == r1 - 1:  # neighbour is North of (r1,c1)
+                mask[idx1] |= BLOCKED_BYTES.N  # block N from cell1
+                mask[idx2] |= BLOCKED_BYTES.S  # block S from cell2
+            elif r2 == r1 + 1:  # South
+                mask[idx1] |= BLOCKED_BYTES.S
+                mask[idx2] |= BLOCKED_BYTES.N
+            elif c2 == c1 - 1:  # West
+                mask[idx1] |= BLOCKED_BYTES.W
+                mask[idx2] |= BLOCKED_BYTES.E
+            else:  # East
+                mask[idx1] |= BLOCKED_BYTES.E
+                mask[idx2] |= BLOCKED_BYTES.W
+
+        return bytes(mask)
 
     def _path_length_difference(self) -> Optional[int]:
         """Difference between player's and opponent's shortest path lengths.
@@ -56,11 +85,11 @@ class BoardState:
             ``player0_len - player1_len`` if *both* are reachable;
             ``None`` if either side cannot reach a goal.
         """
-        player0_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[0],
+        player0_len = bfs_single_source_nearest_target(self.n, self.blocked_direction_mask, self.players_coord[0],
                                                        PLAYER0_TARGETS)
         if player0_len is None:
             return None
-        player1_len = bfs_single_source_nearest_target(self.n, self.blocked_edges, self.players_coord[1],
+        player1_len = bfs_single_source_nearest_target(self.n, self.blocked_direction_mask, self.players_coord[1],
                                                        PLAYER1_TARGETS)
         if player1_len is None:
             return None

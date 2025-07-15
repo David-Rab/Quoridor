@@ -1,14 +1,22 @@
 from typing import Set, Optional, Iterable, Hashable, Tuple, Callable, Dict
-from consts import Coord
+from consts import Coord, Edge, BLOCKED_BYTES
+from utils import to_idx, to_rc
 from math import inf
 import operator
 
 from collections import deque
 
+# from numba import njit
+#
+#
+# @njit(cache=True)
+from collections import deque
+from typing import Optional, Set
+
 
 def bfs_single_source_nearest_target(
         n: int,
-        blocked_edges: frozenset[frozenset[Coord]],
+        blocked_direction_mask: bytes,
         source: Coord,
         targets: Set[Coord],
 ) -> Optional[int]:
@@ -16,38 +24,48 @@ def bfs_single_source_nearest_target(
     Returns the shortest distance from source to any target node in an n x n grid,
     avoiding blocked edges. Assumes all nodes exist.
 
-    Args:
-        n: Grid size (n x n)
-        source: (row, col) starting node
-        targets: Set of (row, col) destination nodes
-        blocked_edges: Set of frozenset({Coord, Coord}) representing undirected blocked edges
-
     Returns:
         Minimum distance to any target, or None if unreachable
     """
-    visited = [[False] * n for _ in range(n)]
+
+    N2 = n * n
+    source = to_idx(*source, n)
+    targets = {to_idx(*target, n) for target in targets}
+
+    visited = bytearray(N2)
     queue = deque([(source, 0)])
 
-    def in_bounds(r: int, c: int) -> bool:
-        return 0 <= r < n and 0 <= c < n
-
     while queue:
-        (row, col), dist = queue.popleft()
-        if visited[row][col]:
+        idx, dist = queue.popleft()
+        if visited[idx]:
             continue
-        visited[row][col] = True
+        visited[idx] = 1
 
-        if (row, col) in targets:
+        if idx in targets:
             return dist
 
-        for d_row, d_col in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nbr = (row + d_row, col + d_col)
-            if in_bounds(*nbr):
-                edge = frozenset({(row, col), nbr})
-                if edge not in blocked_edges and not visited[nbr[0]][nbr[1]]:
-                    queue.append((nbr, dist + 1))
+        r, c = to_rc(idx, n)
+        m = blocked_direction_mask[idx]
 
-    return None  # No target reachable
+        # Push neighbours if the connecting edge is *not* blocked
+        if r > 0 and not (m & BLOCKED_BYTES.N):  # North
+            nxt = idx - n
+            if not visited[nxt]:
+                queue.append((nxt, dist + 1))
+        if r + 1 < n and not (m & BLOCKED_BYTES.S):  # South
+            nxt = idx + n
+            if not visited[nxt]:
+                queue.append((nxt, dist + 1))
+        if c > 0 and not (m & BLOCKED_BYTES.W):  # West
+            nxt = idx - 1
+            if not visited[nxt]:
+                queue.append((nxt, dist + 1))
+        if c + 1 < n and not (m & BLOCKED_BYTES.E):  # East
+            nxt = idx + 1
+            if not visited[nxt]:
+                queue.append((nxt, dist + 1))
+
+    return None
 
 
 class MinimaxSolver:

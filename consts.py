@@ -5,8 +5,6 @@ from typing import Tuple
 # ---------------------------------------------------------------------------
 BOARD_STATE_CACHE = 1000000
 
-
-
 # ---------------------------------------------------------------------------
 # Basic type aliases
 # ---------------------------------------------------------------------------
@@ -16,3 +14,10 @@ Wall = Tuple[Coord, str]  # ((row, col), "H"|"V")
 
 PLAYER0_TARGETS = set([(0, i) for i in range(9)])
 PLAYER1_TARGETS = set([(8, i) for i in range(9)])
+
+
+class BLOCKED_BYTES:
+    N = 0b0001
+    S = 0b0010
+    W = 0b0100
+    E = 0b1000

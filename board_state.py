@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Iterable, FrozenSet, Optional
-from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE, BLOCKED_BYTES
+from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE, BLOCKED_BYTES, N
 from moves import Move, PlayerMove, WallMove
 from utils import to_idx
 from algorithms import bfs_single_source_nearest_target
 from functools import lru_cache
+import numpy as np
 
 
 @lru_cache(maxsize=BOARD_STATE_CACHE)  # unlimited; add a bound if memory is a concern
 def make_board_state(
-        n: int,
         players_coord: Tuple[Coord, Coord],
         players_walls: Tuple[int, int],
         walls: FrozenSet[Wall],
@@ -19,7 +19,7 @@ def make_board_state(
     """
     Return the unique BoardState for this configuration.
     """
-    return BoardState(n, players_coord, players_walls, walls)
+    return BoardState(players_coord, players_walls, walls)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,14 +29,12 @@ class BoardState:
     Build an initial state via :py:meth:`from_walls` and advance it one *move*
     at a time with :py:meth:`from_move`.
     """
-
-    n: int
     players_coord: Tuple[Coord, Coord]
     players_walls: Tuple[int, int]
     walls: FrozenSet[Wall] = field(default_factory=frozenset)
 
-    blocked_edges: FrozenSet[Edge] = field(init=False, repr=False)
-    blocked_direction_mask: bytes = field(init=False, repr=False)
+    blocked_edges: FrozenSet[Edge] = field(init=False, repr=False, compare=False)
+    blocked_direction_mask: np.ndarray = field(init=False, repr=False, compare=False)
     path_len_diff: int = 0
 
     def __post_init__(self) -> None:
@@ -51,30 +49,35 @@ class BoardState:
     def _build_blocked_edges(self) -> FrozenSet[Edge]:
         edges: set[Edge] = set()
         for start, orientation in self.walls:
-            edges.update(self._wall_edges(self.n, start, orientation))
+            edges.update(self._wall_edges(N, start, orientation))
         return frozenset(edges)
 
-    def _build_blocked_direction_mask(self) -> bytes:
-        mask = bytearray(self.n * self.n)
+    def _build_blocked_direction_mask(self) -> np.ndarray:
+        """
+        Build a flat N²-length uint8 array.
+        Each cell’s 4 low bits tell which outgoing edges are blocked:
+            bit0 N, bit1 S, bit2 W, bit3 E
+        """
+        mask = np.zeros(N * N, dtype=np.uint8)  # 1 byte per cell
 
         for edge in self.blocked_edges:
             (r1, c1), (r2, c2) = tuple(edge)
-            idx1, idx2 = to_idx(r1, c1, self.n), to_idx(r2, c2, self.n)
+            idx1, idx2 = to_idx(r1, c1, N), to_idx(r2, c2, N)
 
-            if r2 == r1 - 1:  # neighbour is North of (r1,c1)
-                mask[idx1] |= BLOCKED_BYTES.N  # block N from cell1
-                mask[idx2] |= BLOCKED_BYTES.S  # block S from cell2
-            elif r2 == r1 + 1:  # South
+            if r2 == r1 - 1:  # neighbour is NORTH of (r1,c1)
+                mask[idx1] |= BLOCKED_BYTES.N
+                mask[idx2] |= BLOCKED_BYTES.S
+            elif r2 == r1 + 1:  # SOUTH
                 mask[idx1] |= BLOCKED_BYTES.S
                 mask[idx2] |= BLOCKED_BYTES.N
-            elif c2 == c1 - 1:  # West
+            elif c2 == c1 - 1:  # WEST
                 mask[idx1] |= BLOCKED_BYTES.W
                 mask[idx2] |= BLOCKED_BYTES.E
-            else:  # East
+            else:  # EAST
                 mask[idx1] |= BLOCKED_BYTES.E
                 mask[idx2] |= BLOCKED_BYTES.W
 
-        return bytes(mask)
+        return mask
 
     def _path_length_difference(self) -> Optional[int]:
         """Difference between player's and opponent's shortest path lengths.
@@ -85,16 +88,18 @@ class BoardState:
             ``player0_len - player1_len`` if *both* are reachable;
             ``None`` if either side cannot reach a goal.
         """
-        player0_len = bfs_single_source_nearest_target(self.n, self.blocked_direction_mask, self.players_coord[0],
+        player0_len = bfs_single_source_nearest_target(N, self.blocked_direction_mask,
+                                                       self.players_coord[0][0], self.players_coord[0][1],
                                                        PLAYER0_TARGETS)
-        if player0_len is None:
+        if player0_len == -1:
             return None
-        player1_len = bfs_single_source_nearest_target(self.n, self.blocked_direction_mask, self.players_coord[1],
+        player1_len = bfs_single_source_nearest_target(N, self.blocked_direction_mask,
+                                                       self.players_coord[1][0], self.players_coord[1][1],
                                                        PLAYER1_TARGETS)
-        if player1_len is None:
+        if player1_len == -1:
             return None
 
-        return player0_len - player1_len
+        return int(player0_len - player1_len)
 
     # ------------------------------------------------------------------
     # Static helpers (single source of truth, no repetition) ------------
@@ -105,9 +110,9 @@ class BoardState:
         return frozenset((a, b))
 
     @staticmethod
-    def _in_bounds(n: int, coord: Coord) -> bool:
+    def in_bounds(coord: Coord) -> bool:
         r, c = coord
-        return 0 <= r < n and 0 <= c < n
+        return 0 <= r < N and 0 <= c < N
 
     @staticmethod
     @lru_cache(maxsize=None)  # hit-rate is usually > 99 %
@@ -141,7 +146,6 @@ class BoardState:
     @classmethod
     def from_walls(
             cls,
-            n: int,
             walls: Iterable[Wall] = (),
             players_coords: Tuple[Coord, Coord] | None = None,
             players_walls: Tuple[int, int] | None = None,
@@ -149,16 +153,10 @@ class BoardState:
         """Create an initial state from wall descriptors and player positions."""
         # Validate player positions
         for pid, pos in enumerate(players_coords):
-            if not BoardState._in_bounds(n, pos):
+            if not BoardState.in_bounds(pos):
                 raise ValueError(f"player {pid!r} outside board")  # TODO check overlap
 
-        return make_board_state(n, walls=frozenset(walls), players_coord=players_coords, players_walls=players_walls)
-
-    # ------------------------------------------------------------------
-    # Instance‑level helpers -------------------------------------------
-    # ------------------------------------------------------------------
-    def _in_bounds_inst(self, c: Coord) -> bool:
-        return BoardState._in_bounds(self.n, c)
+        return make_board_state(walls=frozenset(walls), players_coord=players_coords, players_walls=players_walls)
 
     # ------------------------------------------------------------------
     # Apply a single move ----------------------------------------------
@@ -176,16 +174,16 @@ class BoardState:
             new_walls.add(move.wall)
             players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (
                 self.players_walls[0], self.players_walls[1] - 1)
-            return make_board_state(self.n, walls=frozenset(new_walls), players_coord=self.players_coord,
+            return make_board_state(walls=frozenset(new_walls), players_coord=self.players_coord,
                                     players_walls=players_walls)
 
         # ---------- Player move ---------------------------------------
         if isinstance(move, PlayerMove):
             pid, dest = move.player, move.coord  # type: ignore[misc]
-            if not self._in_bounds_inst(dest):
+            if not BoardState.in_bounds(dest):
                 raise ValueError("destination outside board")
             new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
-            return make_board_state(self.n, walls=self.walls, players_coord=new_players,
+            return make_board_state(walls=self.walls, players_coord=new_players,
                                     players_walls=self.players_walls)
 
         raise TypeError("move type note known")
@@ -194,13 +192,13 @@ class BoardState:
     # Queries -----------------------------------------------------------
     # ------------------------------------------------------------------
     def neighbours(self, coord: Coord) -> List[Coord]:
-        if not self._in_bounds_inst(coord):
+        if not BoardState.in_bounds(coord):
             raise ValueError("coordinate outside board")
         r, c = coord
         candidates = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
 
         return [dest for dest in candidates if
-                self._in_bounds_inst(dest) and BoardState._edge(coord, dest) not in self.blocked_edges]
+                BoardState.in_bounds(dest) and BoardState._edge(coord, dest) not in self.blocked_edges]
 
     # ------------------------------------------------------------------
     # ASCII rendering ---------------------------------------------------
@@ -217,19 +215,19 @@ class BoardState:
         rows.append(' : '.join(f'p{k}={v}' for k, v in enumerate(self.players_walls)))
         rows.append(f'path len p0-p1={self.path_len_diff}')
 
-        for r in range(self.n):
+        for r in range(N):
             # cell line with vertical walls
             cell_parts: List[str] = []
-            for c in range(self.n):
+            for c in range(N):
                 cell_parts.append(player_at.get((r, c), empty_char))
-                if c != self.n - 1:
+                if c != N - 1:
                     cell_parts.append(vert_char if e((r, c), (r, c + 1)) in self.blocked_edges else ' ')
             rows.append(''.join(cell_parts))
 
             # horizontal wall line
-            if r != self.n - 1:
+            if r != N - 1:
                 wall_parts: List[str] = []
-                for c in range(self.n):
+                for c in range(N):
                     wall_parts.append(horiz_char if e((r, c), (r + 1, c)) in self.blocked_edges else ' ')
                 rows.append(' '.join(wall_parts))
 
@@ -239,27 +237,24 @@ class BoardState:
     # Dunder conveniences ----------------------------------------------
     # ------------------------------------------------------------------
     def __len__(self) -> int:
-        return self.n * self.n
-
-    def __contains__(self, item: Coord) -> bool:
-        return self._in_bounds_inst(item)
+        return N * N
 
     def __str__(self) -> str:
         return self.ascii()
 
-    def __repr__(self) -> str:
-        return (
-            f"BoardState(n={self.n}, blocked={len(self.blocked_edges)} edges, "
-            f"players={self.players_coord}, players_wall={self.players_walls}, "
-            f"diff={self.path_len_diff})"
-        )
+    @staticmethod
+    def cache_info():
+        return make_board_state.cache_info()
+
+    @staticmethod
+    def cache_clear():
+        return make_board_state.cache_clear()
 
 
 # ------------------ quick demo ------------------
 if __name__ == "__main__":
     # Start with an empty 5×5 board, add a *vertical* wall of length‑3
     s0 = BoardState.from_walls(
-        9,
         walls=[((1, 0), 'V')],
         players_coords=((0, 0), (4, 4)),
         players_walls=(10, 9)

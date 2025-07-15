@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Tuple, Iterable, Iterator, Set
 from board_state import BoardState
-from consts import Coord, Edge
+from consts import Coord, Edge, N
 from moves import Move, PlayerMove, WallMove
 
 
@@ -56,24 +56,24 @@ class LegalMoves(Iterable[Move]):
         news = [(-1, 0), (0, 1), (0, -1), (1, 0)]
         for direction in news:
             candidate = r + direction[0], c + direction[1]
-            if not (self._board._in_bounds_inst(candidate) and BoardState._edge(src,
-                                                                                candidate) not in self._board.blocked_edges):
+            if not (BoardState.in_bounds(candidate) and BoardState._edge(src,
+                                                                         candidate) not in self._board.blocked_edges):
                 continue
             if candidate not in occupied:
                 yield PlayerMove(player=self._pid, coord=candidate)
             else:  # TODO improve this - its very messy, too many yields
                 jump_candidate = r + direction[0] * 2, c + direction[1] * 2
-                if self._board._in_bounds_inst(jump_candidate) and BoardState._edge(candidate,
-                                                                                    jump_candidate) not in self._board.blocked_edges:
+                if BoardState.in_bounds(jump_candidate) and BoardState._edge(candidate,
+                                                                             jump_candidate) not in self._board.blocked_edges:
                     yield PlayerMove(player=self._pid, coord=jump_candidate)
                 else:
                     diag1_candidate = r + direction[0] + direction[1], c + direction[1] + direction[0]
-                    if self._board._in_bounds_inst(diag1_candidate) and BoardState._edge(candidate,
-                                                                                         diag1_candidate) not in self._board.blocked_edges:
+                    if BoardState.in_bounds(diag1_candidate) and BoardState._edge(candidate,
+                                                                                  diag1_candidate) not in self._board.blocked_edges:
                         yield PlayerMove(player=self._pid, coord=diag1_candidate)
                     diag2_candidate = r + direction[0] - direction[1], c + direction[1] - direction[0]
-                    if self._board._in_bounds_inst(diag2_candidate) and BoardState._edge(candidate,
-                                                                                         diag2_candidate) not in self._board.blocked_edges:
+                    if BoardState.in_bounds(diag2_candidate) and BoardState._edge(candidate,
+                                                                                  diag2_candidate) not in self._board.blocked_edges:
                         yield PlayerMove(player=self._pid, coord=diag2_candidate)
 
     # ------------------------------------------------------------------
@@ -81,15 +81,14 @@ class LegalMoves(Iterable[Move]):
     # ------------------------------------------------------------------
     def wall_moves(self) -> Iterator[WallMove]:
         """Yield legal wall placements (lazy)."""
-        n = self._board.n
         for orient in ('H', 'V'):
-            for r in range(n - 1):
-                for c in range(n - 1):
+            for r in range(N - 1):
+                for c in range(N - 1):
                     start = (r, c)
                     if self._crosses(start, orient):
                         continue
                     try:
-                        edges = BoardState._wall_edges(n, start, orient)
+                        edges = BoardState._wall_edges(N, start, orient)
                     except ValueError:
                         continue  # off‑board TODO catch better
                     if self._overlaps(edges):
@@ -99,7 +98,7 @@ class LegalMoves(Iterable[Move]):
     # ------------------------------------------------------------------
     # Helper checks ----------------------------------------------------
     # ------------------------------------------------------------------
-    def _overlaps(self, cand_edges: List[Edge]) -> bool:
+    def _overlaps(self, cand_edges: Tuple[Edge, Edge]) -> bool:
         """Return True if any candidate edge is already blocked."""
         return any(e in self._board.blocked_edges for e in cand_edges)
 
@@ -114,7 +113,6 @@ class LegalMoves(Iterable[Move]):
 
 if __name__ == "__main__":
     s0 = BoardState.from_walls(
-        5,
         walls=[((0, 0), 'V')],
         players_coords=((0, 0), (4, 4)),
         players_walls=(0, 10),

@@ -2,12 +2,13 @@ from board_state import BoardState
 from move_selector import move_selector
 from moves import Move, WallMove, PlayerMove
 from typing import Tuple, Optional, Dict, Callable
+from algorithms import bfs_single_source_nearest_target
+from consts import N, PLAYER0_TARGETS, PLAYER1_TARGETS
 from functools import partial
 
 
 def init_board():
-    board = BoardState.from_walls(n=9,
-                                  walls=[],
+    board = BoardState.from_walls(walls=[],
                                   players_coords=((8, 4), (0, 4)),
                                   players_walls=(10, 10))
     print(board.ascii())
@@ -82,6 +83,7 @@ def ask_player_config(p: int) -> Tuple[bool, Optional[int]]:
 def main():
     is_human: Dict[int, bool] = {}
     depth: Dict[int, int] = {}
+    targets = {0: PLAYER0_TARGETS, 1: PLAYER1_TARGETS}
     for p in (0, 1):
         human, d = ask_player_config(p)
         is_human[p] = human
@@ -91,10 +93,22 @@ def main():
     curr_pid = 0  # player 0 starts
 
     while True:
-        if is_human[curr_pid]:
-            board = human_turn(board, curr_pid)
-        else:
-            board = machine_turn(board, curr_pid, depth[curr_pid])
+        try:
+            if is_human[curr_pid]:
+                board = human_turn(board, curr_pid)
+            else:
+                board = machine_turn(board, curr_pid, depth[curr_pid])
+        except:
+            print("invalid command")
+            continue
+        print(BoardState.cache_info())
+        curr_dist = bfs_single_source_nearest_target(N, board.blocked_direction_mask,
+                                                     board.players_coord[curr_pid][0], board.players_coord[curr_pid][1],
+                                                     targets[curr_pid])
+        if curr_dist == 0:
+            print(f"Player {curr_pid} has won!")
+            break
+
         curr_pid ^= 1  # swap 0 ↔ 1
 
 

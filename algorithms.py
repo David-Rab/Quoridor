@@ -3,7 +3,6 @@ from consts import Coord, Edge, N_BIT, S_BIT, W_BIT, E_BIT
 from utils import to_idx, to_rc
 from math import inf
 import operator
-from collections import deque
 import numpy as np
 from numba import njit
 from numba.typed import List as nbList
@@ -78,7 +77,7 @@ def bfs_single_source_nearest_target(
     return -1
 
 
-class MinimaxSolver:
+class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
     def __init__(
             self,
             children_fn: Callable[[Hashable, bool], list],
@@ -88,48 +87,51 @@ class MinimaxSolver:
         self.children_fn = children_fn
         self.leaf_value = leaf_value
         self.ordering_fn = ordering_fn
-        self.cache: Dict[Tuple[Hashable, int, bool], float] = {}
+        self.cache: Dict[
+            Tuple[Hashable, int, bool], Tuple[float, float]] = {}  # (Node, depth, max_turn): (lower, upper)
 
-    def _evaluate(
-            self,
-            node: Hashable,
-            depth: int,
-            alpha: float = -inf,
-            beta: float = inf,
-            max_turn: bool = True
-    ) -> float:
-        key = (node, depth, max_turn)  # TODO do I need same depth and max_turn?
-        if key in self.cache:
-            return self.cache[key]
+    def _evaluate(self, node, depth, alpha=-inf, beta=inf, max_turn=True):
+        key = (node, depth, max_turn)
+        cached = self.cache.get(key)
+        if cached is not None:
+            lo, hi = cached
+            if lo >= beta or hi <= alpha:
+                return lo if lo >= beta else hi
+            alpha, beta = max(alpha, lo), min(beta, hi)
 
         if depth == 0:
-            value = self.leaf_value(node)
-            self.cache[key] = value
-            return value
+            v = self.leaf_value(node)
+            self.cache[key] = (v, v)
+            return v
 
+        alpha_in, beta_in = alpha, beta  # remember window
         children = self.children_fn(node, max_turn)
-        if self.ordering_fn is not None:
+        if self.ordering_fn:
             children.sort(key=self.ordering_fn, reverse=max_turn)
 
         if max_turn:
-            value = -inf
-            for child in children:
-                child_val = self._evaluate(child, depth - 1, alpha, beta, False)
-                value = max(value, child_val)
-                alpha = max(alpha, value)
-                if alpha >= beta:
-                    break
+            best = -inf
+            for ch in children:
+                best = max(best, self._evaluate(ch, depth - 1, alpha, beta, False))
+                alpha = max(alpha, best)
+                if alpha >= beta: break  # β cutoff
         else:
-            value = inf
-            for child in children:
-                child_val = self._evaluate(child, depth - 1, alpha, beta, True)
-                value = min(value, child_val)
-                beta = min(beta, value)
-                if beta <= alpha:
-                    break
+            best = inf
+            for ch in children:
+                best = min(best, self._evaluate(ch, depth - 1, alpha, beta, True))
+                beta = min(beta, best)
+                if beta <= alpha: break  # α cutoff
 
-        self.cache[key] = value
-        return value
+        if best <= alpha_in:
+            lower, upper = -inf, best  # upper-bound only
+        elif best >= beta_in:
+            lower, upper = best, inf  # lower-bound only
+        else:
+            lower = upper = best  # exact score
+
+        prev = self.cache.get(key, (-inf, inf))
+        self.cache[key] = (max(prev[0], lower), min(prev[1], upper))
+        return best
 
     def best_child(
             self,
@@ -150,5 +152,5 @@ class MinimaxSolver:
             if compare(val, best_value):
                 best_value = val
                 best_child = child  # TODO randomize if tie, save in list and then return random
-
+        print(best_value)
         return best_child

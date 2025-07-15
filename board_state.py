@@ -2,9 +2,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Iterable, FrozenSet, Optional
-from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS
+from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE
 from moves import Move, PlayerMove, WallMove
 from algorithms import bfs_single_source_nearest_target
+from functools import lru_cache
+
+
+@lru_cache(maxsize=BOARD_STATE_CACHE)  # unlimited; add a bound if memory is a concern
+def make_board_state(
+        n: int,
+        players_coord: Tuple[Coord, Coord],
+        players_walls: Tuple[int, int],
+        walls: FrozenSet[Wall],
+) -> BoardState:
+    """
+    Return the unique BoardState for this configuration.
+    """
+    return BoardState(n, players_coord, players_walls, walls)
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,30 +81,30 @@ class BoardState:
         return 0 <= r < n and 0 <= c < n
 
     @staticmethod
-    def _wall_edges(n: int, start: Coord, orientation: str) -> List[Edge]:
-        """Expand a wall descriptor into its constituent blocked edges.
-
-        * ``orientation == 'V'`` blocks *vertical* wall segments – i.e. the
-          edges **between** ``(r+i, c)`` and ``(r+i, c+1)`` for *i = 0…length‑1*.
-        * ``orientation == 'H'`` blocks *horizontal* wall segments – the edges
-          between ``(r, c+i)`` and ``(r+1, c+i)``.
+    @lru_cache(maxsize=None)  # hit-rate is usually > 99 %
+    def _wall_edges(n: int, start: Coord, orientation: str) -> Tuple[Edge, Edge]:
         """
-        length = 2
+        Return the two blocked edges for a length-2 wall.
+        Result is cached per (n, start, orientation).
+        """
         r, c = start
+        if c + 1 >= n or r + 1 >= n:
+            raise ValueError("wall extends outside the board")
         orientation = orientation.upper()
-        if orientation not in {"H", "V"}:
+        if orientation == "V":  # vertical wall → block E-W edges
+            edge = BoardState._edge  # local alias (saves attr-lookup)
+            return (
+                edge((r, c), (r, c + 1)),
+                edge((r + 1, c), (r + 1, c + 1)),
+            )
+        elif orientation == "H":  # horizontal wall
+            edge = BoardState._edge
+            return (
+                edge((r, c), (r + 1, c)),
+                edge((r, c + 1), (r + 1, c + 1)),
+            )
+        else:
             raise ValueError("orientation must be 'H' or 'V'")
-
-        edges: List[Edge] = []
-        for i in range(length):
-            if orientation == "V":  # vertical wall – blocks East‑West edges
-                a, b = (r + i, c), (r + i, c + 1)
-            else:  # horizontal wall – blocks North‑South edges
-                a, b = (r, c + i), (r + 1, c + i)
-            if not (BoardState._in_bounds(n, a) and BoardState._in_bounds(n, b)):
-                raise ValueError("wall extends outside the board")
-            edges.append(BoardState._edge(a, b))
-        return edges
 
     # ------------------------------------------------------------------
     # Construction helpers ---------------------------------------------
@@ -109,7 +123,7 @@ class BoardState:
             if not BoardState._in_bounds(n, pos):
                 raise ValueError(f"player {pid!r} outside board")  # TODO check overlap
 
-        return cls(n, walls=frozenset(walls), players_coord=players_coords, players_walls=players_walls)
+        return make_board_state(n, walls=frozenset(walls), players_coord=players_coords, players_walls=players_walls)
 
     # ------------------------------------------------------------------
     # Instance‑level helpers -------------------------------------------
@@ -133,8 +147,8 @@ class BoardState:
             new_walls.add(move.wall)
             players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (
                 self.players_walls[0], self.players_walls[1] - 1)
-            return BoardState(self.n, walls=frozenset(new_walls), players_coord=self.players_coord,
-                              players_walls=players_walls)
+            return make_board_state(self.n, walls=frozenset(new_walls), players_coord=self.players_coord,
+                                    players_walls=players_walls)
 
         # ---------- Player move ---------------------------------------
         if isinstance(move, PlayerMove):
@@ -142,7 +156,8 @@ class BoardState:
             if not self._in_bounds_inst(dest):
                 raise ValueError("destination outside board")
             new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
-            return BoardState(self.n, walls=self.walls, players_coord=new_players, players_walls=self.players_walls)
+            return make_board_state(self.n, walls=self.walls, players_coord=new_players,
+                                    players_walls=self.players_walls)
 
         raise TypeError("move type note known")
 

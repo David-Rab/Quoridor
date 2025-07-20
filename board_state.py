@@ -126,7 +126,7 @@ class BoardState:
         Result is cached per (n, start, orientation).
         """
         r, c = start
-        if c + 1 >= N or r + 1 >= N:
+        if not BoardState.in_bounds((r + 1, c + 1)):
             raise ValueError("wall extends outside the board")
         orientation = orientation.upper()
         if orientation == "V":  # vertical wall → block E-W edges

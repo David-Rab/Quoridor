@@ -88,7 +88,7 @@ class LegalMoves(Iterable[Move]):
                     if self._crosses(start, orient):
                         continue
                     try:
-                        edges = BoardState._wall_edges(N, start, orient)
+                        edges = BoardState._wall_edges(start, orient)
                     except ValueError:
                         continue  # off‑board TODO catch better
                     if self._overlaps(edges):

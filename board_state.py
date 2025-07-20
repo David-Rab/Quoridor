@@ -49,7 +49,7 @@ class BoardState:
     def _build_blocked_edges(self) -> FrozenSet[Edge]:
         edges: set[Edge] = set()
         for start, orientation in self.walls:
-            edges.update(self._wall_edges(N, start, orientation))
+            edges.update(self._wall_edges(start, orientation))
         return frozenset(edges)
 
     def _build_blocked_direction_mask(self) -> np.ndarray:
@@ -61,23 +61,27 @@ class BoardState:
         mask = np.zeros(N * N, dtype=np.uint8)  # 1 byte per cell
 
         for edge in self.blocked_edges:
-            (r1, c1), (r2, c2) = tuple(edge)
-            idx1, idx2 = to_idx(r1, c1, N), to_idx(r2, c2, N)
-
-            if r2 == r1 - 1:  # neighbour is NORTH of (r1,c1)
-                mask[idx1] |= BLOCKED_BYTES.N
-                mask[idx2] |= BLOCKED_BYTES.S
-            elif r2 == r1 + 1:  # SOUTH
-                mask[idx1] |= BLOCKED_BYTES.S
-                mask[idx2] |= BLOCKED_BYTES.N
-            elif c2 == c1 - 1:  # WEST
-                mask[idx1] |= BLOCKED_BYTES.W
-                mask[idx2] |= BLOCKED_BYTES.E
-            else:  # EAST
-                mask[idx1] |= BLOCKED_BYTES.E
-                mask[idx2] |= BLOCKED_BYTES.W
+            self._update_mask_from_edge(edge, mask)
 
         return mask
+
+    @staticmethod
+    def _update_mask_from_edge(edge: Edge, mask: np.ndarray):
+        (r1, c1), (r2, c2) = tuple(edge)
+        idx1, idx2 = to_idx(r1, c1, N), to_idx(r2, c2, N)
+
+        if r2 == r1 - 1:  # neighbour is NORTH of (r1,c1)
+            mask[idx1] |= BLOCKED_BYTES.N
+            mask[idx2] |= BLOCKED_BYTES.S
+        elif r2 == r1 + 1:  # SOUTH
+            mask[idx1] |= BLOCKED_BYTES.S
+            mask[idx2] |= BLOCKED_BYTES.N
+        elif c2 == c1 - 1:  # WEST
+            mask[idx1] |= BLOCKED_BYTES.W
+            mask[idx2] |= BLOCKED_BYTES.E
+        else:  # EAST
+            mask[idx1] |= BLOCKED_BYTES.E
+            mask[idx2] |= BLOCKED_BYTES.W
 
     def _path_length_difference(self) -> Optional[int]:
         """Difference between player's and opponent's shortest path lengths.
@@ -116,13 +120,13 @@ class BoardState:
 
     @staticmethod
     @lru_cache(maxsize=None)  # hit-rate is usually > 99 %
-    def _wall_edges(n: int, start: Coord, orientation: str) -> Tuple[Edge, Edge]:
+    def _wall_edges(start: Coord, orientation: str) -> Tuple[Edge, Edge]:
         """
         Return the two blocked edges for a length-2 wall.
         Result is cached per (n, start, orientation).
         """
         r, c = start
-        if c + 1 >= n or r + 1 >= n:
+        if c + 1 >= N or r + 1 >= N:
             raise ValueError("wall extends outside the board")
         orientation = orientation.upper()
         if orientation == "V":  # vertical wall → block E-W edges

@@ -77,7 +77,71 @@ def bfs_single_source_nearest_target(
     return -1
 
 
-class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
+@njit(cache=True)
+def bfs_all_distances(n: int,
+                      blocked_direction_mask: np.ndarray,
+                      source_r: int,
+                      source_c: int) -> np.ndarray:
+    """
+    Return an int32 array 'dist' of length n*n with the shortest distance
+    from (source_r, source_c) to every cell. Unreachable cells have -1.
+    blocked_direction_mask: uint8[::1], 4 low bits = blocked N,S,W,E.
+    """
+    N2 = n * n
+    source = to_idx(source_r, source_c)
+
+    # Distance array also plays role of visited ( -1 == not seen )
+    dist_arr = np.full(N2, -1, dtype=np.uint8)
+    dist_arr[source] = 0
+
+    # -------- typed Lists for the queue --------------------------------
+    queue_idx = nbList.empty_list(np.int32)
+    queue_dist = nbList.empty_list(np.int32)
+    queue_idx.append(source)
+    queue_dist.append(0)
+    head = 0  # read pointer
+
+    while head < len(queue_idx):
+        idx = queue_idx[head]
+        dist = queue_dist[head]
+        head += 1
+
+        if dist_arr[idx] != -1:
+            continue
+        dist_arr[idx] = dist
+
+        r, c = to_rc(idx, n)
+        m = blocked_direction_mask[idx]
+
+        # -- explore neighbours if the edge is open ---------------------
+        if r > 0 and not (m & N_BIT):
+            nxt = idx - n
+            if dist_arr[nxt] == -1:
+                queue_idx.append(nxt)
+                queue_dist.append(dist + 1)
+
+        if r + 1 < n and not (m & S_BIT):
+            nxt = idx + n
+            if dist_arr[nxt] == -1:
+                queue_idx.append(nxt)
+                queue_dist.append(dist + 1)
+
+        if c > 0 and not (m & W_BIT):
+            nxt = idx - 1
+            if dist_arr[nxt] == -1:
+                queue_idx.append(nxt)
+                queue_dist.append(dist + 1)
+
+        if c + 1 < n and not (m & E_BIT):
+            nxt = idx + 1
+            if dist_arr[nxt] == -1:
+                queue_idx.append(nxt)
+                queue_dist.append(dist + 1)
+
+    return dist_arr
+
+
+class MinimaxSolver:  # TODO !!!! if you have a winning move - always choose it
     def __init__(
             self,
             children_fn: Callable[[Hashable, bool], list],
@@ -105,7 +169,7 @@ class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
             return v
 
         alpha_in, beta_in = alpha, beta  # remember window
-        children = list(self.children_fn(node, max_turn))
+        children = self.children_fn(node, max_turn)
         if self.ordering_fn:
             children.sort(key=self.ordering_fn, reverse=max_turn)
 
@@ -114,13 +178,15 @@ class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
             for ch in children:
                 best = max(best, self._evaluate(ch, depth - 1, alpha, beta, False))
                 alpha = max(alpha, best)
-                if alpha >= beta: break  # β cutoff
+                if alpha >= beta:
+                    break  # β cutoff
         else:
             best = inf
             for ch in children:
                 best = min(best, self._evaluate(ch, depth - 1, alpha, beta, True))
                 beta = min(beta, best)
-                if beta <= alpha: break  # α cutoff
+                if beta <= alpha:
+                    break  # α cutoff
 
         if best <= alpha_in:
             lower, upper = -inf, best  # upper-bound only
@@ -143,7 +209,7 @@ class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
         compare = operator.gt if max_turn else operator.lt
         best_child = None
 
-        children = list(self.children_fn(root, max_turn))
+        children = self.children_fn(root, max_turn)
         if self.ordering_fn is not None:
             children.sort(key=self.ordering_fn, reverse=max_turn)
 

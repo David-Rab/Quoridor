@@ -19,7 +19,7 @@ def children_fn(state: BoardState, pid: int) -> BoardState:
 def move_selector(board: BoardState,
                   player_id: int,
                   depth: int) -> BoardState:
-    solver = MinimaxSolver(children_fn=children_fn, leaf_value=leaf_fn, ordering_fn=leaf_fn)
+    solver = MinimaxSolver(children_fn=children_fn, leaf_value=leaf_fn)
     best_move, best_value = solver.best_child(board, depth, max_turn=bool(player_id))
 
     return best_move

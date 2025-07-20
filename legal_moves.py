@@ -85,11 +85,12 @@ class LegalMoves(Iterable[Move]):
             for r in range(N - 1):
                 for c in range(N - 1):
                     start = (r, c)
+                    wall = (start, orient)
                     if self._crosses(start, orient):
                         continue
-                    if self._overlaps((start, orient)):
+                    if self._overlaps(wall):
                         continue
-                    yield WallMove(player=self._pid, wall=(start, orient))
+                    yield WallMove(player=self._pid, wall=wall)
 
     # ------------------------------------------------------------------
     # Helper checks ----------------------------------------------------

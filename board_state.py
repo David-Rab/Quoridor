@@ -23,6 +23,19 @@ def make_board_state(
     return BoardState(players_coord, players_walls, walls)
 
 
+def make_board_state_flagged(
+        players_coord: Tuple[Coord, Coord],
+        players_walls: Tuple[int, int],
+        walls: FrozenSet[Wall],
+) -> Tuple[BoardState, bool]:
+    before = make_board_state.cache_info()
+    board_state = make_board_state(walls=walls, players_coord=players_coord,
+                                   players_walls=players_walls)
+    after = make_board_state.cache_info()
+    is_from_cache = (after.misses == before.misses)
+    return board_state, is_from_cache
+
+
 @dataclass(frozen=True, slots=True)
 class BoardState:
     """Immutable *n×n* board with walls and players.
@@ -38,16 +51,16 @@ class BoardState:
     blocked_direction_mask: np.ndarray = field(init=False, repr=False, compare=False)
     path_len_diff: int = 0
 
-    def __post_init__(self,
-                   # blocked_edges: Optional[frozenset[Edge]] = None,
-                   # blocked_direction_mask: Optional[np.ndarray] = None
+    def _post_init(self,
+                   blocked_edges: Optional[frozenset[Edge]] = None,
+                   blocked_direction_mask: Optional[np.ndarray] = None
                    ) -> None:
         # bypass the freeze just this once
-        # if blocked_edges is None:
-        blocked_edges = self._build_blocked_edges()
+        if blocked_edges is None:
+            blocked_edges = self._build_blocked_edges()
         object.__setattr__(self, "blocked_edges", blocked_edges)
-        # if blocked_direction_mask is None:
-        blocked_direction_mask = self._build_blocked_direction_mask()
+        if blocked_direction_mask is None:
+            blocked_direction_mask = self._build_blocked_direction_mask()
         object.__setattr__(self, "blocked_direction_mask", blocked_direction_mask)
         path_len_diff = self._path_length_difference()
         object.__setattr__(self, "path_len_diff", path_len_diff)
@@ -155,7 +168,6 @@ class BoardState:
             return False
         return True
 
-
     # ------------------------------------------------------------------
     # Construction helpers ---------------------------------------------
     # ------------------------------------------------------------------
@@ -172,16 +184,17 @@ class BoardState:
             if not BoardState.in_bounds(pos):
                 raise ValueError(f"player {pid!r} outside board")  # TODO check overlap
 
-        board_state = make_board_state(walls=frozenset(walls), players_coord=players_coords,
-                                       players_walls=players_walls)
-        # board_state._post_init()
+        board_state, is_from_cache = make_board_state_flagged(walls=frozenset(walls), players_coord=players_coords,
+                                                              players_walls=players_walls)
+        if not is_from_cache:
+            board_state._post_init()
 
         return board_state
 
     # ------------------------------------------------------------------
     # Apply a single move ----------------------------------------------
     # ------------------------------------------------------------------
-    def from_move(self, move: Move) -> "BoardState":
+    def from_move(self, move: Move) -> BoardState:
         """Return a *new* state obtained by applying *move* to *self*.
 
         Two legal move forms:
@@ -203,11 +216,12 @@ class BoardState:
         new_walls.add(move.wall)
         players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (
             self.players_walls[0], self.players_walls[1] - 1)
-        board_state = make_board_state(walls=frozenset(new_walls), players_coord=self.players_coord,
-                                       players_walls=players_walls)
-        # blocked_edges, blocked_direction_mask = self._blocked_edges_from_wall_move(move)
-        # board_state._post_init(blocked_edges=blocked_edges, blocked_direction_mask=blocked_direction_mask)
-        # board_state._post_init() # TODO
+        board_state, is_from_cache = make_board_state_flagged(walls=frozenset(new_walls),
+                                                              players_coord=self.players_coord,
+                                                              players_walls=players_walls)
+        if not is_from_cache:
+            blocked_edges, blocked_direction_mask = self._blocked_edges_from_wall_move(move)
+            board_state._post_init(blocked_edges=blocked_edges, blocked_direction_mask=blocked_direction_mask)
         return board_state
 
     def _blocked_edges_from_wall_move(self, move: WallMove) -> Tuple[frozenset[Edge], np.ndarray]:
@@ -225,18 +239,15 @@ class BoardState:
         if not BoardState.in_bounds(dest):
             raise ValueError("destination outside board")
         new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
-        board_state = make_board_state(walls=self.walls, players_coord=new_players,
-                                       players_walls=self.players_walls)
-        # board_state._post_init() # TODO
-        # board_state._post_init(blocked_edges=self.blocked_edges,
-        #                        no need for deepcopy since frozenset is immutable
-                               # blocked_direction_mask=self.blocked_direction_mask.copy(order='C'))
+        board_state, is_from_cache = make_board_state_flagged(walls=self.walls, players_coord=new_players,
+                                                              players_walls=self.players_walls)
+        if not is_from_cache:
+            board_state._post_init(blocked_edges=self.blocked_edges,
+                                   blocked_direction_mask=self.blocked_direction_mask.copy(order='C'))
         return board_state
 
-        # --------------------------------------------------------------------- #
-
     @classmethod
-    def random(cls, rng: random.Random | None = None) -> "BoardState":
+    def random(cls, rng: random.Random | None = None) -> BoardState:
         """Sample a legal 9×9 state without path-existence checking."""
         MAX_WALLS = 20  # 10 for each player
         PER_PLAYER = 10

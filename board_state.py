@@ -174,23 +174,42 @@ class BoardState:
         """
         # ---------- Wall placement ------------------------------------
         if isinstance(move, WallMove):
-            new_walls = set(self.walls)
-            new_walls.add(move.wall)
-            players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (
-                self.players_walls[0], self.players_walls[1] - 1)
-            return make_board_state(walls=frozenset(new_walls), players_coord=self.players_coord,
-                                    players_walls=players_walls)
+            return self._from_wall_move(move)
 
         # ---------- Player move ---------------------------------------
         if isinstance(move, PlayerMove):
-            pid, dest = move.player, move.coord  # type: ignore[misc]
-            if not BoardState.in_bounds(dest):
-                raise ValueError("destination outside board")
-            new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
-            return make_board_state(walls=self.walls, players_coord=new_players,
-                                    players_walls=self.players_walls)
+            return self._from_player_move(move)
 
         raise TypeError("move type note known")
+
+    def _from_wall_move(self, move: WallMove) -> BoardState:
+        new_walls = set(self.walls)
+        new_walls.add(move.wall)
+        players_walls = (self.players_walls[0] - 1, self.players_walls[1]) if move.player == 0 else (
+            self.players_walls[0], self.players_walls[1] - 1)
+        board_state = make_board_state(walls=frozenset(new_walls), players_coord=self.players_coord,
+                                       players_walls=players_walls)
+
+        return board_state
+
+    # def _blocked_edges_from_wall_move(self, move: WallMove) -> Tuple[frozenset[Edge], np.ndarray]:
+    #     blocked_edges = set(self.blocked_edges)
+    #     edges = BoardState._wall_edges(*move.wall)
+    #     blocked_edges.update(edges)
+    #     blocked_direction_mask = self.blocked_direction_mask.copy(order='C')
+    #     BoardState._update_mask_from_edge(edges[0], blocked_direction_mask)
+    #     BoardState._update_mask_from_edge(edges[1], blocked_direction_mask)
+    #     return frozenset(blocked_edges), blocked_direction_mask
+
+    def _from_player_move(self, move: PlayerMove) -> BoardState:
+        pid, dest = move.player, move.coord
+        if not BoardState.in_bounds(dest):
+            raise ValueError("destination outside board")
+
+        new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
+        board_state = make_board_state(walls=self.walls, players_coord=new_players,
+                                       players_walls=self.players_walls)
+        return board_state
 
     # ------------------------------------------------------------------
     # Queries -----------------------------------------------------------

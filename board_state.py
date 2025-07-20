@@ -206,7 +206,7 @@ class BoardState:
     def ascii(self) -> str:
         empty_char = '*'
         vert_char = '|'
-        horiz_char = '—'
+        horiz_char = '———'
 
         rows: List[str] = []
         player_at: Dict[Coord, str] = {pos: str(pid) for pid, pos in enumerate(self.players_coord)}
@@ -215,21 +215,22 @@ class BoardState:
         rows.append(' : '.join(f'p{k}={v}' for k, v in enumerate(self.players_walls)))
         rows.append(f'path len p0-p1={self.path_len_diff}')
 
+        rows.append('  ' + '   '.join(f'{i}' for i in range(N)))
         for r in range(N):
             # cell line with vertical walls
-            cell_parts: List[str] = []
+            cell_parts: List[str] = [f'{r}']
             for c in range(N):
                 cell_parts.append(player_at.get((r, c), empty_char))
                 if c != N - 1:
                     cell_parts.append(vert_char if e((r, c), (r, c + 1)) in self.blocked_edges else ' ')
-            rows.append(''.join(cell_parts))
+            rows.append(' '.join(cell_parts))
 
             # horizontal wall line
             if r != N - 1:
                 wall_parts: List[str] = []
                 for c in range(N):
-                    wall_parts.append(horiz_char if e((r, c), (r + 1, c)) in self.blocked_edges else ' ')
-                rows.append(' '.join(wall_parts))
+                    wall_parts.append(horiz_char if e((r, c), (r + 1, c)) in self.blocked_edges else '   ')
+                rows.append(' ' + ' '.join(wall_parts))
 
         return '\n'.join(rows)
 

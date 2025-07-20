@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Tuple, Iterable, Iterator, Set
 from board_state import BoardState
-from consts import Coord, Edge, N
+from consts import Coord, Edge, N, Wall
 from moves import Move, PlayerMove, WallMove
 
 
@@ -87,20 +87,16 @@ class LegalMoves(Iterable[Move]):
                     start = (r, c)
                     if self._crosses(start, orient):
                         continue
-                    try:
-                        edges = BoardState._wall_edges(N, start, orient)
-                    except ValueError:
-                        continue  # off‑board TODO catch better
-                    if self._overlaps(edges):
+                    if self._overlaps((start, orient)):
                         continue
-                    yield WallMove(player=self._pid, wall=(start, orient))  # TODO only if doesnt block any player
+                    yield WallMove(player=self._pid, wall=(start, orient))
 
     # ------------------------------------------------------------------
     # Helper checks ----------------------------------------------------
     # ------------------------------------------------------------------
-    def _overlaps(self, cand_edges: Tuple[Edge, Edge]) -> bool:
+    def _overlaps(self, wall: Wall) -> bool:
         """Return True if any candidate edge is already blocked."""
-        return any(e in self._board.blocked_edges for e in cand_edges)
+        return wall in self._board.walls
 
     def _crosses(self, start: Coord, orient: str) -> bool:
         """Return True if placing a wall of orientation *orient* at *start*

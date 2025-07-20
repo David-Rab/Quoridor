@@ -1,9 +1,14 @@
 from legal_moves import LegalMoves
 from algorithms import MinimaxSolver
 from board_state import BoardState
+from math import inf
 
 
 def leaf_fn(state: BoardState) -> float:
+    if state.path_len_0 == 0:
+        return -inf
+    if state.path_len_1 == 0:
+        return inf
     return state.path_len_diff
 
 

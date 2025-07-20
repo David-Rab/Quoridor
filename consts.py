@@ -16,8 +16,8 @@ Wall = Tuple[Coord, str]  # ((row, col), "H"|"V")
 
 N = 9  # Board Size
 
-PLAYER0_TARGETS_SET = set([(0, i) for i in range(9)])
-PLAYER1_TARGETS_SET = set([(8, i) for i in range(9)])
+PLAYER0_TARGETS_SET = set([(0, i) for i in range(N)])
+PLAYER1_TARGETS_SET = set([(N - 1, i) for i in range(N)])
 
 
 def target_set_to_target_array(target_set: Set[Coord]) -> np.ndarray:

@@ -9,7 +9,7 @@ from functools import partial
 
 def init_board():
     board = BoardState.from_walls(walls=[],
-                                  players_coords=((8, 4), (0, 4)),
+                                  players_coords=((5, 4), (3, 4)),
                                   players_walls=(10, 10))
     print(board.ascii())
     return board

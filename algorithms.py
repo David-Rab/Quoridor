@@ -105,7 +105,7 @@ class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
             return v
 
         alpha_in, beta_in = alpha, beta  # remember window
-        children = self.children_fn(node, max_turn)
+        children = list(self.children_fn(node, max_turn))
         if self.ordering_fn:
             children.sort(key=self.ordering_fn, reverse=max_turn)
 
@@ -138,12 +138,12 @@ class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
             root: Hashable,
             depth: int,
             max_turn: bool
-    ) -> Optional[Hashable]:
+    ) -> Tuple[Optional[Hashable], int]:
         best_value = -inf if max_turn else inf
         compare = operator.gt if max_turn else operator.lt
         best_child = None
 
-        children = self.children_fn(root, max_turn)
+        children = list(self.children_fn(root, max_turn))
         if self.ordering_fn is not None:
             children.sort(key=self.ordering_fn, reverse=max_turn)
 
@@ -152,5 +152,4 @@ class MinimaxSolver: # TODO !!!! if you have a winning move - always choose it
             if compare(val, best_value):
                 best_value = val
                 best_child = child  # TODO randomize if tie, save in list and then return random
-        print(best_value)
-        return best_child
+        return best_child, best_value

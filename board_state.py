@@ -8,6 +8,7 @@ from utils import to_idx
 from algorithms import bfs_single_source_nearest_target
 from functools import lru_cache
 import numpy as np
+import random
 
 
 @lru_cache(maxsize=BOARD_STATE_CACHE)  # unlimited; add a bound if memory is a concern
@@ -188,6 +189,77 @@ class BoardState:
 
         raise TypeError("move type note known")
 
+        # --------------------------------------------------------------------- #
+
+    @classmethod
+    def random(cls, rng: random.Random | None = None) -> "BoardState":
+        """Sample a legal 9×9 state without path-existence checking."""
+        MAX_WALLS = 20  # 10 for each player
+        PER_PLAYER = 10
+
+        # ──── Helpers ────────────────────────────────────────────────────────────────
+
+        def _all_wall_coords() -> list[Wall]:
+            """All legal wall anchors on a 9×9 board, without conflicts."""
+            horiz = [((r, c), "H") for r in range(N - 1) for c in range(N - 2)]
+            vert = [((r, c), "V") for r in range(N - 2) for c in range(N - 1)]
+            return horiz + vert  # 128 distinct anchors
+
+        ALL_WALLS = _all_wall_coords()
+
+        def _conflicts(w: Wall) -> set[Wall]:
+            """Return the set of anchors that clash with *w* (overlap or cross)."""
+            (r, c), o = w
+            if o == "H":  # spans (r,c)-(r,c+1)
+                return {
+                    w,  # same spot
+                    ((r, c), "V"),  # cross at left half
+                    ((r, c + 1), "V"),  # cross at right half
+                }
+            else:  # "V", spans (r,c)-(r+1,c)
+                return {
+                    w,
+                    ((r, c), "H"),  # cross at upper half
+                    ((r + 1, c), "H"),  # cross at lower half
+                }
+
+        # Pre-compute conflict map so we can sample fast
+        CONFLICTS = {w: _conflicts(w) for w in ALL_WALLS}
+
+        rng = rng or random
+
+        # ── 1) decide how many walls remain to each player ────────────
+        w0 = rng.randint(0, PER_PLAYER)
+        w1 = rng.randint(0, PER_PLAYER)
+
+        # ── 2) walls to be placed ────────────
+        placed = MAX_WALLS - (w0 + w1)
+
+        # ── 3) choose *placed* non-conflicting wall anchors ──────────────
+        walls: set[Wall] = set()
+        candidates = ALL_WALLS[:]  # shallow copy
+        rng.shuffle(candidates)
+        while len(walls) < placed and candidates:
+            w = candidates.pop()
+            if not walls & CONFLICTS[w]:  # no conflict ⇒ accept
+                walls.add(w)
+
+        # (extremely unlikely but in theory we could run out of slots;
+        #   if so, we just fall back to the smaller, still-legal set)
+
+        # ── 4) choose pawn positions ─────────────────────────────────────
+        while True:
+            p0 = (rng.randint(1, N - 1), rng.randint(0, N - 1))  # row 1-8
+            p1 = (rng.randint(0, N - 2), rng.randint(0, N - 1))  # row 0-7
+            if p0 != p1:
+                break
+
+        return cls(
+            players_coord=(p0, p1),
+            players_walls=(w0, w1),
+            walls=frozenset(walls),
+        )
+
     # ------------------------------------------------------------------
     # Queries -----------------------------------------------------------
     # ------------------------------------------------------------------
@@ -215,14 +287,15 @@ class BoardState:
         rows.append(' : '.join(f'p{k}={v}' for k, v in enumerate(self.players_walls)))
         rows.append(f'path len p0-p1={self.path_len_diff}')
 
+        rows.append('  '+ '   '.join(f'{i}' for i in range(N)))
         for r in range(N):
             # cell line with vertical walls
-            cell_parts: List[str] = []
+            cell_parts: List[str] = [f'{r}']
             for c in range(N):
                 cell_parts.append(player_at.get((r, c), empty_char))
                 if c != N - 1:
                     cell_parts.append(vert_char if e((r, c), (r, c + 1)) in self.blocked_edges else ' ')
-            rows.append(''.join(cell_parts))
+            rows.append(' '.join(cell_parts))
 
             # horizontal wall line
             if r != N - 1:

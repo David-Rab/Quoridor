@@ -87,13 +87,10 @@ class LegalMoves(Iterable[Move]):
                     start = (r, c)
                     if self._crosses(start, orient):
                         continue
-                    try:
-                        edges = BoardState._wall_edges(start, orient)
-                    except ValueError:
-                        continue  # off‑board TODO catch better
+                    edges = BoardState._wall_edges(start, orient)
                     if self._overlaps(edges):
                         continue
-                    yield WallMove(player=self._pid, wall=(start, orient))  # TODO only if doesnt block any player
+                    yield WallMove(player=self._pid, wall=(start, orient))
 
     # ------------------------------------------------------------------
     # Helper checks ----------------------------------------------------

@@ -49,20 +49,24 @@ class BoardState:
 
     blocked_edges: FrozenSet[Edge] = field(init=False, repr=False, compare=False)
     blocked_direction_mask: np.ndarray = field(init=False, repr=False, compare=False)
+    path_len0: int = 0
+    path_len1: int = 0
     path_len_diff: int = 0
 
-    def _post_init(self,
-                   blocked_edges: Optional[frozenset[Edge]] = None,
-                   blocked_direction_mask: Optional[np.ndarray] = None
+    def __post_init__(self,
+                   # blocked_edges: Optional[frozenset[Edge]] = None,
+                   # blocked_direction_mask: Optional[np.ndarray] = None
                    ) -> None:
         # bypass the freeze just this once
-        if blocked_edges is None:
-            blocked_edges = self._build_blocked_edges()
+        # if blocked_edges is None:
+        blocked_edges = self._build_blocked_edges()
         object.__setattr__(self, "blocked_edges", blocked_edges)
-        if blocked_direction_mask is None:
-            blocked_direction_mask = self._build_blocked_direction_mask()
+        # if blocked_direction_mask is None:
+        blocked_direction_mask = self._build_blocked_direction_mask()
         object.__setattr__(self, "blocked_direction_mask", blocked_direction_mask)
-        path_len_diff = self._path_length_difference()
+        path_len0, path_len1, path_len_diff = self._path_length_difference()
+        object.__setattr__(self, "path_len0", path_len0)
+        object.__setattr__(self, "path_len1", path_len1)
         object.__setattr__(self, "path_len_diff", path_len_diff)
 
     def _build_blocked_edges(self) -> FrozenSet[Edge]:
@@ -85,7 +89,7 @@ class BoardState:
         return mask
 
     @staticmethod
-    def _update_mask_from_edge(edge: Edge, mask: np.ndarray):
+    def _update_mask_from_edge(edge: Edge, mask: np.ndarray): # TODO precompile, factor out edge mask and precompile and cache it
         (r1, c1), (r2, c2) = tuple(edge)
         idx1, idx2 = to_idx(r1, c1, N), to_idx(r2, c2, N)
         if r2 == r1 - 1:  # neighbour is NORTH of (r1,c1)
@@ -101,7 +105,7 @@ class BoardState:
             mask[idx1] |= BLOCKED_BYTES.E
             mask[idx2] |= BLOCKED_BYTES.W
 
-    def _path_length_difference(self) -> Optional[int]:
+    def _path_length_difference(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """Difference between player's and opponent's shortest path lengths.
 
         Returns
@@ -110,18 +114,18 @@ class BoardState:
             ``player0_len - player1_len`` if *both* are reachable;
             ``None`` if either side cannot reach a goal.
         """
-        player0_len = bfs_single_source_nearest_target(N, self.blocked_direction_mask,
+        path_len0 = bfs_single_source_nearest_target(N, self.blocked_direction_mask,
                                                        self.players_coord[0][0], self.players_coord[0][1],
                                                        PLAYER0_TARGETS)
-        if player0_len == -1:
-            return None
-        player1_len = bfs_single_source_nearest_target(N, self.blocked_direction_mask,
+        if path_len0 == -1:
+            return None, None, None
+        path_len1 = bfs_single_source_nearest_target(N, self.blocked_direction_mask,
                                                        self.players_coord[1][0], self.players_coord[1][1],
                                                        PLAYER1_TARGETS)
-        if player1_len == -1:
-            return None
+        if path_len1 == -1:
+            return None, None, None
 
-        return int(player0_len - player1_len)
+        return int(path_len0), int(path_len1), int(path_len0 - path_len1)
 
     # ------------------------------------------------------------------
     # Static helpers (single source of truth, no repetition) ------------
@@ -144,7 +148,7 @@ class BoardState:
         Result is cached per (n, start, orientation).
         """
         r, c = start
-        if not BoardState._is_wall_in_board(c, r):
+        if not BoardState.in_bounds((c, r)):
             raise ValueError("wall extends outside the board")
         orientation = orientation.upper()
         if orientation == "V":  # vertical wall → block E-W edges
@@ -162,12 +166,6 @@ class BoardState:
         else:
             raise ValueError("orientation must be 'H' or 'V'")
 
-    @staticmethod
-    def _is_wall_in_board(c, r) -> bool:
-        if c + 1 >= N or r + 1 >= N:
-            return False
-        return True
-
     # ------------------------------------------------------------------
     # Construction helpers ---------------------------------------------
     # ------------------------------------------------------------------
@@ -182,12 +180,12 @@ class BoardState:
         # Validate player positions
         for pid, pos in enumerate(players_coords):
             if not BoardState.in_bounds(pos):
-                raise ValueError(f"player {pid!r} outside board")  # TODO check overlap
+                raise ValueError(f"player {pid!r} outside board")
 
         board_state, is_from_cache = make_board_state_flagged(walls=frozenset(walls), players_coord=players_coords,
                                                               players_walls=players_walls)
-        if not is_from_cache:
-            board_state._post_init()
+        # if not is_from_cache:
+        #     board_state._post_init()
 
         return board_state
 
@@ -219,9 +217,9 @@ class BoardState:
         board_state, is_from_cache = make_board_state_flagged(walls=frozenset(new_walls),
                                                               players_coord=self.players_coord,
                                                               players_walls=players_walls)
-        if not is_from_cache:
-            blocked_edges, blocked_direction_mask = self._blocked_edges_from_wall_move(move)
-            board_state._post_init(blocked_edges=blocked_edges, blocked_direction_mask=blocked_direction_mask)
+        # if not is_from_cache:
+        #     blocked_edges, blocked_direction_mask = self._blocked_edges_from_wall_move(move)
+        #     board_state._post_init(blocked_edges=blocked_edges, blocked_direction_mask=blocked_direction_mask)
         return board_state
 
     def _blocked_edges_from_wall_move(self, move: WallMove) -> Tuple[frozenset[Edge], np.ndarray]:
@@ -241,9 +239,9 @@ class BoardState:
         new_players = (dest, self.players_coord[1]) if move.player == 0 else (self.players_coord[0], dest)
         board_state, is_from_cache = make_board_state_flagged(walls=self.walls, players_coord=new_players,
                                                               players_walls=self.players_walls)
-        if not is_from_cache:
-            board_state._post_init(blocked_edges=self.blocked_edges,
-                                   blocked_direction_mask=self.blocked_direction_mask.copy(order='C'))
+        # if not is_from_cache:
+        #     board_state._post_init(blocked_edges=self.blocked_edges,
+        #                            blocked_direction_mask=self.blocked_direction_mask.copy(order='C'))
         return board_state
 
     @classmethod

@@ -5,9 +5,9 @@ from math import inf
 
 
 def leaf_fn(state: BoardState) -> float:
-    if state.path_len0 == 0:
+    if state.path_len_0 == 0:
         return -inf
-    if state.path_len1 == 0:
+    if state.path_len_1 == 0:
         return inf
     return state.path_len_diff
 

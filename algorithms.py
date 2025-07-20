@@ -89,7 +89,6 @@ def bfs_all_distances(n: int,
     """
     N2 = n * n
     source = to_idx(source_r, source_c)
-
     # Distance array also plays role of visited ( -1 == not seen )
     dist_arr = np.full(N2, -1, dtype=np.uint8)
     dist_arr[source] = 0
@@ -108,8 +107,8 @@ def bfs_all_distances(n: int,
 
         if dist_arr[idx] != -1:
             continue
-        dist_arr[idx] = dist
 
+        dist_arr[idx] = dist
         r, c = to_rc(idx, n)
         m = blocked_direction_mask[idx]
 
@@ -171,6 +170,7 @@ class MinimaxSolver:  # TODO !!!! if you have a winning move - always choose it
         alpha_in, beta_in = alpha, beta  # remember window
         children = self.children_fn(node, max_turn)
         if self.ordering_fn:
+            children = list(children)
             children.sort(key=self.ordering_fn, reverse=max_turn)
 
         if max_turn:
@@ -211,6 +211,7 @@ class MinimaxSolver:  # TODO !!!! if you have a winning move - always choose it
 
         children = self.children_fn(root, max_turn)
         if self.ordering_fn is not None:
+            children = list(children)
             children.sort(key=self.ordering_fn, reverse=max_turn)
 
         for child in children:

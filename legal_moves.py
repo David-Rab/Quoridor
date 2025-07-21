@@ -97,7 +97,10 @@ class LegalMoves(Iterable[Move]):
     # ------------------------------------------------------------------
     def _overlaps(self, cand_edges: Tuple[Edge, Edge]) -> bool:
         """Return True if any candidate edge is already blocked."""
-        return any(e in self._board.blocked_edges for e in cand_edges)
+        for e in cand_edges:
+            if e in self._board.blocked_edges:
+                return True
+        return False
 
     def _crosses(self, start: Coord, orient: str) -> bool:
         """Return True if placing a wall of orientation *orient* at *start*

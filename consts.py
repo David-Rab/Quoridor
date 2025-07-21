@@ -34,10 +34,3 @@ N_BIT = 0b0001
 S_BIT = 0b0010
 W_BIT = 0b0100
 E_BIT = 0b1000
-
-
-class BLOCKED_BYTES:
-    N = N_BIT
-    S = S_BIT
-    W = W_BIT
-    E = E_BIT

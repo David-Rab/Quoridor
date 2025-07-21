@@ -140,7 +140,7 @@ def bfs_all_distances(n: int,
     return dist_arr
 
 
-class MinimaxSolver:  # TODO !!!! if you have a winning move - always choose it
+class MinimaxSolver:
     def __init__(
             self,
             children_fn: Callable[[Hashable, bool], list],

@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Iterable, FrozenSet, Optional
-from consts import Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE, BLOCKED_BYTES, N
+from consts import (Coord, Edge, Wall, PLAYER0_TARGETS, PLAYER1_TARGETS, BOARD_STATE_CACHE, N,
+                    N_BIT, S_BIT, W_BIT, E_BIT)
 from moves import Move, PlayerMove, WallMove
 from utils import to_idx
 from algorithms import bfs_single_source_nearest_target
 from functools import lru_cache
 import numpy as np
+from numba import njit
 
 
 @lru_cache(maxsize=BOARD_STATE_CACHE)  # unlimited; add a bound if memory is a concern
@@ -27,11 +29,12 @@ def make_board_state_flagged(
         players_walls: Tuple[int, int],
         walls: FrozenSet[Wall],
 ) -> Tuple[BoardState, bool]:
-    before = make_board_state.cache_info()
     board_state = make_board_state(walls=walls, players_coord=players_coord,
                                    players_walls=players_walls)
-    after = make_board_state.cache_info()
-    is_from_cache = (after.misses == before.misses)
+    is_blocked_edges = hasattr(board_state, 'blocked_edges')
+    is_blocked_direction_mask = hasattr(board_state, 'blocked_direction_mask')
+    assert is_blocked_edges == is_blocked_direction_mask
+    is_from_cache = is_blocked_edges and is_blocked_direction_mask
     return board_state, is_from_cache
 
 
@@ -83,27 +86,32 @@ class BoardState:
         mask = np.zeros(N * N, dtype=np.uint8)  # 1 byte per cell
 
         for edge in self.blocked_edges:
-            self._update_mask_from_edge(edge, mask)
+            (r1, c1), (r2, c2) = tuple(edge)
+            self._update_mask_from_edge(r1, c1,
+                                        r2, c2,
+                                        mask)
 
         return mask
 
     @staticmethod
-    def _update_mask_from_edge(edge: Edge, mask: np.ndarray):
-        (r1, c1), (r2, c2) = tuple(edge)
+    @njit(cache=False)
+    def _update_mask_from_edge(r1: int, c1: int,
+                               r2: int, c2: int,
+                               mask: np.ndarray):
         idx1, idx2 = to_idx(r1, c1, N), to_idx(r2, c2, N)
 
         if r2 == r1 - 1:  # neighbour is NORTH of (r1,c1)
-            mask[idx1] |= BLOCKED_BYTES.N
-            mask[idx2] |= BLOCKED_BYTES.S
+            mask[idx1] |= N_BIT
+            mask[idx2] |= S_BIT
         elif r2 == r1 + 1:  # SOUTH
-            mask[idx1] |= BLOCKED_BYTES.S
-            mask[idx2] |= BLOCKED_BYTES.N
+            mask[idx1] |= S_BIT
+            mask[idx2] |= N_BIT
         elif c2 == c1 - 1:  # WEST
-            mask[idx1] |= BLOCKED_BYTES.W
-            mask[idx2] |= BLOCKED_BYTES.E
+            mask[idx1] |= W_BIT
+            mask[idx2] |= E_BIT
         else:  # EAST
-            mask[idx1] |= BLOCKED_BYTES.E
-            mask[idx2] |= BLOCKED_BYTES.W
+            mask[idx1] |= E_BIT
+            mask[idx2] |= W_BIT
 
     def _path_length_difference(self) -> Tuple[Optional[int], Optional[int], Optional[int]]:
         """Difference between player's and opponent's shortest path lengths.
@@ -131,6 +139,7 @@ class BoardState:
     # Static helpers (single source of truth, no repetition) ------------
     # ------------------------------------------------------------------
     @staticmethod
+    @lru_cache(maxsize=None)
     def _edge(a: Coord, b: Coord) -> Edge:
         """Return the canonical, hashable representation of an unordered edge."""
         return frozenset((a, b))
@@ -141,7 +150,7 @@ class BoardState:
         return 0 <= r < N and 0 <= c < N
 
     @staticmethod
-    @lru_cache(maxsize=None)  # hit-rate is usually > 99 %
+    @lru_cache(maxsize=None)
     def _wall_edges(start: Coord, orientation: str) -> Tuple[Edge, Edge]:
         """
         Return the two blocked edges for a length-2 wall.
@@ -228,8 +237,10 @@ class BoardState:
         edges = BoardState._wall_edges(*move.wall)
         blocked_edges.update(edges)
         blocked_direction_mask = self.blocked_direction_mask.copy(order='C')
-        BoardState._update_mask_from_edge(edges[0], blocked_direction_mask)
-        BoardState._update_mask_from_edge(edges[1], blocked_direction_mask)
+        (r1, c1), (r2, c2) = tuple(edges[0])
+        BoardState._update_mask_from_edge(r1, c1, r2, c2, blocked_direction_mask)
+        (r1, c1), (r2, c2) = tuple(edges[1])
+        BoardState._update_mask_from_edge(r1, c1, r2, c2, blocked_direction_mask)
         return frozenset(blocked_edges), blocked_direction_mask
 
     def _from_player_move(self, move: PlayerMove) -> BoardState:
